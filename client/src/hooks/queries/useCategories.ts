@@ -53,6 +53,19 @@ export function useCreateCategoryGroup() {
   });
 }
 
+export function useUpdateCategory() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, ...data }: { id: string; name?: string; groupId?: string | null }) =>
+      api.put<{ category: Category }>(`/api/categories/${id}`, data).then((r) => r.category),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: categoryKeys.all });
+      queryClient.invalidateQueries({ queryKey: categoryKeys.groups });
+    },
+  });
+}
+
 export function useDeleteCategory() {
   const queryClient = useQueryClient();
 

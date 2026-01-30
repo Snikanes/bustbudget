@@ -1,5 +1,6 @@
 import { useUIStore } from '@/stores/uiStore';
 import { useBudget } from '@/hooks/queries/useBudget';
+import { formatNOK } from '@/utils/currency';
 import MonthNavigator from './MonthNavigator';
 import BudgetTable from './BudgetTable';
 
@@ -28,13 +29,37 @@ function BudgetView() {
     );
   }
 
+  const isOverAssigned = budget ? budget.availableToAssign < 0 : false;
+
   return (
     <div className="h-full flex flex-col">
-      <header className="px-6 py-4 border-b border-gray-200 bg-white">
-        <MonthNavigator
-          currentMonth={selectedMonth}
-          onMonthChange={setSelectedMonth}
-        />
+      <header className="border-b border-gray-200 bg-white">
+        {/* Available to Assign */}
+        {budget && (
+          <div className={`px-6 py-3 ${
+            isOverAssigned ? 'bg-red-50' : 'bg-green-50'
+          }`}>
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-gray-600">
+                Available to Assign
+              </span>
+              <span className={`text-xl font-bold ${
+                isOverAssigned ? 'text-red-600' : 'text-green-600'
+              }`}>
+                {budget.availableToAssign < 0 && '-'}
+                {formatNOK(Math.abs(budget.availableToAssign))}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Month Navigator */}
+        <div className="px-6 py-4">
+          <MonthNavigator
+            currentMonth={selectedMonth}
+            onMonthChange={setSelectedMonth}
+          />
+        </div>
       </header>
 
       <div className="flex-1 overflow-auto p-6">

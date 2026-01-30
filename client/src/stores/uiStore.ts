@@ -12,10 +12,20 @@ interface ModalState {
   data?: Record<string, unknown>;
 }
 
+interface SelectedCategory {
+  id: string;
+  name: string;
+  groupId: string | null;
+}
+
 interface UIState {
   // Month selection
   selectedMonth: string; // YYYY-MM format
   setSelectedMonth: (month: string) => void;
+
+  // Category selection (for inspector)
+  selectedCategory: SelectedCategory | null;
+  setSelectedCategory: (category: SelectedCategory | null) => void;
 
   // Category group expansion
   expandedGroups: Set<string>;
@@ -44,6 +54,10 @@ export const useUIStore = create<UIState>()(
       // Month selection
       selectedMonth: getCurrentMonth(),
       setSelectedMonth: (month) => set({ selectedMonth: month }),
+
+      // Category selection
+      selectedCategory: null,
+      setSelectedCategory: (category) => set({ selectedCategory: category }),
 
       // Category group expansion
       expandedGroups: new Set<string>(),

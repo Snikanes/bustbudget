@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { BudgetEntry } from '@/types';
 import { formatNOK } from '@/utils/currency';
 import { useUpdateBudgetEntry } from '@/hooks/queries/useBudget';
+import { useUIStore } from '@/stores/uiStore';
 import CurrencyInput from '@/components/shared/CurrencyInput';
 import AvailabilityBadge from '@/components/shared/AvailabilityBadge';
 
@@ -13,6 +14,18 @@ interface CategoryRowProps {
 function CategoryRow({ category, month }: CategoryRowProps) {
   const [isEditing, setIsEditing] = useState(false);
   const updateBudgetEntry = useUpdateBudgetEntry();
+  const selectedCategory = useUIStore((s) => s.selectedCategory);
+  const setSelectedCategory = useUIStore((s) => s.setSelectedCategory);
+
+  const isSelected = selectedCategory?.id === category.categoryId;
+
+  const handleRowClick = () => {
+    setSelectedCategory({
+      id: category.categoryId,
+      name: category.categoryName,
+      groupId: category.groupId,
+    });
+  };
 
   const handleAssignedChange = (value: number) => {
     updateBudgetEntry.mutate({
@@ -24,14 +37,19 @@ function CategoryRow({ category, month }: CategoryRowProps) {
   };
 
   return (
-    <div className="grid grid-cols-[1fr_120px_120px_120px] gap-2 px-4 py-2 hover:bg-gray-50 transition-colors">
+    <div
+      onClick={handleRowClick}
+      className={`grid grid-cols-[1fr_120px_120px_120px] gap-2 px-4 py-2 cursor-pointer transition-colors ${
+        isSelected ? 'bg-blue-50 hover:bg-blue-100' : 'hover:bg-gray-50'
+      }`}
+    >
       {/* Category name */}
       <div className="pl-6 text-gray-700">
         {category.categoryName}
       </div>
 
       {/* Assigned */}
-      <div className="text-right">
+      <div className="text-right" onClick={(e) => e.stopPropagation()}>
         {isEditing ? (
           <CurrencyInput
             value={category.assigned}

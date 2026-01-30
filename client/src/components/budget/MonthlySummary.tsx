@@ -17,27 +17,13 @@ function MonthlySummary() {
     );
   }
 
-  const isOverAssigned = budget.availableToAssign < 0;
-
   return (
     <div className="space-y-6">
-      {/* Available to Assign */}
-      <div className={`p-4 rounded-lg ${
-        isOverAssigned ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200'
-      }`}>
-        <div className="text-sm font-medium text-gray-600 mb-1">
-          Available to Assign
-        </div>
-        <div className={`text-2xl font-bold ${
-          isOverAssigned ? 'text-red-600' : 'text-green-600'
-        }`}>
-          {budget.availableToAssign < 0 && '-'}
-          {formatNOK(Math.abs(budget.availableToAssign))}
-        </div>
-      </div>
-
       {/* Summary Stats */}
       <div className="space-y-3">
+        <div className="text-sm font-medium text-gray-600 mb-2">
+          Month Summary
+        </div>
         <div className="flex justify-between text-sm">
           <span className="text-gray-600">Total Inflows</span>
           <span className="font-medium">{formatNOK(budget.totalInflows)}</span>
