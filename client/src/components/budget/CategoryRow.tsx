@@ -45,9 +45,19 @@ function CategoryRow({ category, month }: CategoryRowProps) {
       }`}
     >
       <div className="grid grid-cols-[1fr_120px_120px_120px] gap-2 px-4 py-2">
-        {/* Category name */}
+        {/* Category name with progress */}
         <div className="pl-6 text-gray-700 flex flex-col gap-1 min-w-0">
-          <span>{category.categoryName}</span>
+          {/* Category name and target text on same line */}
+          <div className="flex items-center justify-between gap-2">
+            <span>{category.categoryName}</span>
+            {category.target && (
+              <TargetProgressText
+                target={category.target}
+                available={category.available}
+              />
+            )}
+          </div>
+          {/* Progress bar */}
           {category.target && (
             <TargetProgressIndicator
               target={category.target}
@@ -82,16 +92,9 @@ function CategoryRow({ category, month }: CategoryRowProps) {
           {formatNOK(category.activity)}
         </div>
 
-        {/* Available / Target Text */}
-        <div className="text-right flex flex-col items-end justify-center gap-1">
-          {category.target ? (
-            <TargetProgressText
-              target={category.target}
-              available={category.available}
-            />
-          ) : (
-            <AvailabilityBadge amount={category.available} />
-          )}
+        {/* Available */}
+        <div className="text-right">
+          <AvailabilityBadge amount={category.available} />
         </div>
       </div>
     </div>
