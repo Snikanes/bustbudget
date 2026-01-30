@@ -5,9 +5,10 @@ import { useAccount, useUpdateAccount } from '@/hooks/queries/useAccounts';
 import { useTransactions } from '@/hooks/queries/useTransactions';
 import { formatNOK } from '@/utils/currency';
 import { parseQFX, ParsedTransaction } from '@/utils/qfxParser';
+import { parseExcel } from '@/utils/excelParser';
 import TransactionTable from './TransactionTable';
 import TextInput from '@/components/shared/TextInput';
-import FileImportModal from './FileImportModal';
+import FileImportModal, { ImportedFile } from './FileImportModal';
 import ImportPreviewModal from './ImportPreviewModal';
 
 function AccountView() {
@@ -37,11 +38,17 @@ function AccountView() {
     return name.trim().length > 0 && name.trim().length <= 100;
   };
 
-  const handleFileSelected = (content: string) => {
+  const handleFileSelected = (file: ImportedFile) => {
     setShowFileImport(false);
     setImportError(null);
 
-    const result = parseQFX(content);
+    let result;
+    if (file.type === 'excel') {
+      result = parseExcel(file.content as ArrayBuffer);
+    } else {
+      result = parseQFX(file.content as string);
+    }
+
     if (result.error) {
       setImportError(result.error);
       return;

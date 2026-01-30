@@ -44,6 +44,8 @@ function ImportPreviewModal({
   // Track edits by originalPayee -> { payee, categoryId }
   const [payeeEdits, setPayeeEdits] = useState<Record<string, { payee: string; categoryId: string | null }>>({});
   const [editingField, setEditingField] = useState<EditingField>(null);
+  // Track excluded transactions by index
+  const [excludedIndices, setExcludedIndices] = useState<Set<number>>(new Set());
 
   // Build a lookup for category names
   const categoryNameLookup = useMemo(() => {
@@ -88,8 +90,21 @@ function ImportPreviewModal({
     });
   }, [transactions, existingTransactions, payeeMappings, payeeEdits]);
 
-  const newTransactions = previewTransactions.filter((t) => !t.isDuplicate);
-  const duplicateCount = previewTransactions.length - newTransactions.length;
+  const newTransactions = previewTransactions.filter((t, index) => !t.isDuplicate && !excludedIndices.has(index));
+  const duplicateCount = previewTransactions.filter((t) => t.isDuplicate).length;
+  const excludedCount = excludedIndices.size;
+
+  const toggleExcluded = (index: number) => {
+    setExcludedIndices((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) {
+        next.delete(index);
+      } else {
+        next.add(index);
+      }
+      return next;
+    });
+  };
 
   const handlePayeeChange = (originalPayee: string, newPayee: string) => {
     setPayeeEdits((prev) => ({
@@ -212,9 +227,13 @@ function ImportPreviewModal({
           <p className="text-sm text-gray-700">
             <span className="font-medium">{newTransactions.length} transaction{newTransactions.length !== 1 ? 's' : ''}</span> will
             be imported into <span className="font-medium">{accountName}</span>
-            {duplicateCount > 0 && (
+            {(duplicateCount > 0 || excludedCount > 0) && (
               <span className="text-gray-500">
-                {' '}({duplicateCount} duplicate{duplicateCount !== 1 ? 's' : ''} will be skipped)
+                {' '}(
+                {duplicateCount > 0 && `${duplicateCount} duplicate${duplicateCount !== 1 ? 's' : ''}`}
+                {duplicateCount > 0 && excludedCount > 0 && ', '}
+                {excludedCount > 0 && `${excludedCount} excluded`}
+                {' '}will be skipped)
               </span>
             )}
           </p>
@@ -226,6 +245,7 @@ function ImportPreviewModal({
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-gray-500 border-b border-gray-200">
+                <th className="py-2 pr-2 font-medium w-8"></th>
                 <th className="py-2 pr-4 font-medium">DATE</th>
                 <th className="py-2 pr-4 font-medium">PAYEE</th>
                 <th className="py-2 pr-4 font-medium">CATEGORY</th>
@@ -235,18 +255,32 @@ function ImportPreviewModal({
               </tr>
             </thead>
             <tbody>
-              {previewTransactions.map((t, index) => (
+              {previewTransactions.map((t, index) => {
+                const isExcluded = excludedIndices.has(index);
+                const isSkipped = t.isDuplicate || isExcluded;
+
+                return (
                 <tr
                   key={index}
-                  className={`border-b border-gray-100 ${t.isDuplicate ? 'opacity-50' : ''}`}
+                  className={`border-b border-gray-100 ${isSkipped ? 'opacity-50' : ''}`}
                 >
+                  <td className="py-2 pr-2">
+                    {!t.isDuplicate && (
+                      <input
+                        type="checkbox"
+                        checked={!isExcluded}
+                        onChange={() => toggleExcluded(index)}
+                        className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                    )}
+                  </td>
                   <td className="py-2 pr-4 whitespace-nowrap">
-                    <span className={t.isDuplicate ? 'line-through' : ''}>
+                    <span className={isSkipped ? 'line-through' : ''}>
                       {formatDate(t.date)}
                     </span>
                   </td>
                   <td className="py-2 pr-4 max-w-[180px]">
-                    {editingField?.index === index && editingField?.field === 'payee' && !t.isDuplicate ? (
+                    {editingField?.index === index && editingField?.field === 'payee' && !isSkipped ? (
                       <PayeeSelect
                         value={t.displayPayee}
                         onChange={(name) => handlePayeeChange(t.originalPayee, name)}
@@ -258,19 +292,19 @@ function ImportPreviewModal({
                       />
                     ) : (
                       <span
-                        onClick={() => !t.isDuplicate && setEditingField({ index, field: 'payee' })}
-                        className={`truncate block ${t.isDuplicate ? 'line-through' : 'cursor-pointer hover:bg-blue-50 px-1 -mx-1 rounded'}`}
+                        onClick={() => !isSkipped && setEditingField({ index, field: 'payee' })}
+                        className={`truncate block ${isSkipped ? 'line-through' : 'cursor-pointer hover:bg-blue-50 px-1 -mx-1 rounded'}`}
                         title={t.isMapped && t.displayPayee !== t.originalPayee ? `Original: ${t.originalPayee}` : undefined}
                       >
                         {t.displayPayee || '-'}
-                        {t.isMapped && t.displayPayee !== t.originalPayee && !t.isDuplicate && (
+                        {t.isMapped && t.displayPayee !== t.originalPayee && !isSkipped && (
                           <span className="ml-1 text-blue-500 text-xs">*</span>
                         )}
                       </span>
                     )}
                   </td>
                   <td className="py-2 pr-4 max-w-[150px]">
-                    {editingField?.index === index && editingField?.field === 'category' && !t.isDuplicate ? (
+                    {editingField?.index === index && editingField?.field === 'category' && !isSkipped ? (
                       <CategorySelect
                         value={t.displayCategoryId}
                         onChange={(categoryId) => handleCategoryChange(t.originalPayee, categoryId)}
@@ -281,26 +315,27 @@ function ImportPreviewModal({
                       />
                     ) : (
                       <span
-                        onClick={() => !t.isDuplicate && setEditingField({ index, field: 'category' })}
-                        className={`truncate block text-gray-600 ${t.isDuplicate ? 'line-through' : 'cursor-pointer hover:bg-blue-50 px-1 -mx-1 rounded'}`}
+                        onClick={() => !isSkipped && setEditingField({ index, field: 'category' })}
+                        className={`truncate block text-gray-600 ${isSkipped ? 'line-through' : 'cursor-pointer hover:bg-blue-50 px-1 -mx-1 rounded'}`}
                       >
                         {t.displayCategoryId ? categoryNameLookup.get(t.displayCategoryId) || '-' : '-'}
                       </span>
                     )}
                   </td>
                   <td className="py-2 pr-4 truncate max-w-[120px] text-gray-500" title={t.memo}>
-                    <span className={t.isDuplicate ? 'line-through' : ''}>
+                    <span className={isSkipped ? 'line-through' : ''}>
                       {t.memo || '-'}
                     </span>
                   </td>
-                  <td className={`py-2 pr-4 text-right ${t.isDuplicate ? 'line-through' : ''} ${t.amount < 0 ? 'text-red-600' : ''}`}>
+                  <td className={`py-2 pr-4 text-right ${isSkipped ? 'line-through' : ''} ${t.amount < 0 ? 'text-red-600' : ''}`}>
                     {t.amount < 0 ? formatNOK(Math.abs(t.amount)) : ''}
                   </td>
-                  <td className={`py-2 text-right ${t.isDuplicate ? 'line-through' : ''} ${t.amount > 0 ? 'text-green-600' : ''}`}>
+                  <td className={`py-2 text-right ${isSkipped ? 'line-through' : ''} ${t.amount > 0 ? 'text-green-600' : ''}`}>
                     {t.amount > 0 ? formatNOK(t.amount) : ''}
                   </td>
                 </tr>
-              ))}
+              );
+              })}
             </tbody>
           </table>
         </div>

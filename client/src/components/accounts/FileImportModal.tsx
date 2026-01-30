@@ -1,9 +1,16 @@
 import { useRef } from 'react';
 import { X, Info, Upload } from 'lucide-react';
 
+export type FileType = 'qfx' | 'excel';
+
+export interface ImportedFile {
+  type: FileType;
+  content: string | ArrayBuffer;
+}
+
 interface FileImportModalProps {
   onClose: () => void;
-  onFileSelected: (content: string) => void;
+  onFileSelected: (file: ImportedFile) => void;
 }
 
 function FileImportModal({ onClose, onFileSelected }: FileImportModalProps) {
@@ -17,12 +24,25 @@ function FileImportModal({ onClose, onFileSelected }: FileImportModalProps) {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    const fileName = file.name.toLowerCase();
+    const isExcel = fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
+
     const reader = new FileReader();
     reader.onload = (event) => {
-      const content = event.target?.result as string;
-      onFileSelected(content);
+      const content = event.target?.result;
+      if (content) {
+        onFileSelected({
+          type: isExcel ? 'excel' : 'qfx',
+          content,
+        });
+      }
     };
-    reader.readAsText(file);
+
+    if (isExcel) {
+      reader.readAsArrayBuffer(file);
+    } else {
+      reader.readAsText(file);
+    }
   };
 
   return (
@@ -47,8 +67,7 @@ function FileImportModal({ onClose, onFileSelected }: FileImportModalProps) {
           </p>
 
           <div className="text-sm text-gray-600">
-            <p><span className="font-medium">Recommended formats:</span> OFX and QFX</p>
-            <p><span className="font-medium">Supported formats:</span> QFX</p>
+            <p><span className="font-medium">Supported formats:</span> QFX, OFX, Excel (.xlsx)</p>
           </div>
 
           {/* Info box */}
@@ -82,7 +101,7 @@ function FileImportModal({ onClose, onFileSelected }: FileImportModalProps) {
         <input
           ref={fileInputRef}
           type="file"
-          accept=".qfx,.ofx"
+          accept=".qfx,.ofx,.xlsx,.xls"
           onChange={handleFileChange}
           className="hidden"
         />
