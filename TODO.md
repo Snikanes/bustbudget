@@ -3,10 +3,10 @@
 ## High Priority Improvements
 
 ### 1. Make Right Sidebar Resizable
-- [ ] Add resize functionality to CategoryInspector sidebar
-- [ ] Match left sidebar behavior (drag, persist width, visual feedback)
-- [ ] Set appropriate min/max width constraints (e.g., 300-600px)
-- [ ] Store width in localStorage separately from left sidebar
+- [x] Add resize functionality to CategoryInspector sidebar
+- [x] Match left sidebar behavior (drag, persist width, visual feedback)
+- [x] Set appropriate min/max width constraints (200-500px)
+- [x] Store width in localStorage separately from left sidebar
 
 ### 2. Show Target Progress in Budget View
 - [x] Add visual progress indicators to budget table rows
@@ -32,7 +32,7 @@
 
 ### 5. Double-click to Reset Sidebar Widths
 - [ ] Add double-click handler to left sidebar resize handle
-- [ ] Add double-click handler to right sidebar resize handle (when implemented)
+- [ ] Add double-click handler to right sidebar resize handle
 - [ ] Reset to default width on double-click
 - [ ] Add subtle animation for the reset
 
@@ -82,6 +82,7 @@
 - [x] By_date target with smart monthly calculation
 - [x] Calculation accounts for existing available amount
 - [x] Resizable left sidebar with persistent width
+- [x] Resizable right sidebar with persistent width
 - [x] Target progress indicators in budget view (yellow progress bars + "X more needed by the Xth")
 
 ---

@@ -24,6 +24,9 @@ function LeftSidebar() {
   useEffect(() => {
     if (!isResizing) return;
 
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'col-resize';
+
     const handleMouseMove = (e: MouseEvent) => {
       const newWidth = e.clientX;
       if (newWidth >= MIN_WIDTH && newWidth <= MAX_WIDTH) {
@@ -41,6 +44,8 @@ function LeftSidebar() {
     return () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
     };
   }, [isResizing]);
 
