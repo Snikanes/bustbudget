@@ -66,7 +66,7 @@ export interface PayeeRow {
 export interface CategoryTargetRow {
   id: string;
   category_id: string;
-  target_type: 'monthly' | 'yearly';
+  target_type: 'monthly' | 'yearly' | 'by_date';
   target_amount: number;
   target_date: string;
   recurrence_day: number | null;
@@ -154,7 +154,7 @@ export interface Payee {
 export interface CategoryTarget {
   id: string;
   categoryId: string;
-  targetType: 'monthly' | 'yearly';
+  targetType: 'monthly' | 'yearly' | 'by_date';
   targetAmount: number;
   targetDate: string;
   recurrenceDay: number | null;
@@ -253,14 +253,14 @@ export interface UpdateBudgetRequest {
 }
 
 export interface CreateCategoryTargetRequest {
-  targetType: 'monthly' | 'yearly';
+  targetType: 'monthly' | 'yearly' | 'by_date';
   targetAmount: number;
   targetDate: string;
   recurrenceDay?: number;
 }
 
 export interface UpdateCategoryTargetRequest {
-  targetType?: 'monthly' | 'yearly';
+  targetType?: 'monthly' | 'yearly' | 'by_date';
   targetAmount?: number;
   targetDate?: string;
   recurrenceDay?: number | null;

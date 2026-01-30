@@ -99,7 +99,7 @@ export interface Payee {
 export interface CategoryTarget {
   id: string;
   categoryId: string;
-  targetType: 'monthly' | 'yearly';
+  targetType: 'monthly' | 'yearly' | 'by_date';
   targetAmount: number;
   targetDate: string;
   recurrenceDay: number | null;

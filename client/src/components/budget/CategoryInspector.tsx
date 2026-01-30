@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { X, Trash2, Edit2, FolderInput, DollarSign } from 'lucide-react';
 import { useUIStore } from '@/stores/uiStore';
 import { useUpdateCategory, useDeleteCategory, useCategoryGroups } from '@/hooks/queries/useCategories';
-import { budgetKeys, useUpdateBudgetEntry } from '@/hooks/queries/useBudget';
+import { budgetKeys, useUpdateBudgetEntry, useBudget } from '@/hooks/queries/useBudget';
 import { useQueryClient } from '@tanstack/react-query';
 import CategoryTarget from './CategoryTarget';
 import { useCategoryTarget } from '@/hooks/queries/useCategoryTargets';
@@ -19,6 +19,7 @@ function CategoryInspector() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const { data: categoryGroups } = useCategoryGroups();
+  const { data: budgetData } = useBudget(selectedMonth);
   const updateCategory = useUpdateCategory();
   const deleteCategory = useDeleteCategory();
   const updateBudgetEntry = useUpdateBudgetEntry();
@@ -92,11 +93,48 @@ function CategoryInspector() {
   };
 
   const handleAssignTarget = () => {
-    if (categoryTarget) {
+    if (categoryTarget && budgetData) {
+      let assignedAmount = categoryTarget.targetAmount;
+
+      // For by_date targets, calculate monthly amount based on months remaining
+      if (categoryTarget.targetType === 'by_date') {
+        const currentDate = new Date(selectedMonth + '-01');
+        const targetDate = new Date(categoryTarget.targetDate);
+
+        // Calculate months remaining (including current month)
+        const monthsRemaining =
+          (targetDate.getFullYear() - currentDate.getFullYear()) * 12 +
+          (targetDate.getMonth() - currentDate.getMonth()) + 1;
+
+        if (monthsRemaining > 0) {
+          // Find current category's available amount
+          let currentAvailable = 0;
+          for (const group of budgetData.groups) {
+            const category = group.categories.find(c => c.categoryId === selectedCategory.id);
+            if (category) {
+              currentAvailable = category.available;
+              break;
+            }
+          }
+          if (currentAvailable === 0) {
+            const ungroupedCategory = budgetData.ungroupedCategories.find(
+              c => c.categoryId === selectedCategory.id
+            );
+            if (ungroupedCategory) {
+              currentAvailable = ungroupedCategory.available;
+            }
+          }
+
+          // Calculate remaining amount needed
+          const remainingNeeded = Math.max(0, categoryTarget.targetAmount - currentAvailable);
+          assignedAmount = Math.round(remainingNeeded / monthsRemaining);
+        }
+      }
+
       updateBudgetEntry.mutate({
         month: selectedMonth,
         categoryId: selectedCategory.id,
-        assigned: categoryTarget.targetAmount,
+        assigned: assignedAmount,
       });
     }
   };

@@ -154,7 +154,7 @@ END;
 CREATE TABLE IF NOT EXISTS category_target (
     id TEXT PRIMARY KEY,
     category_id TEXT NOT NULL,
-    target_type TEXT NOT NULL CHECK (target_type IN ('monthly', 'yearly')),
+    target_type TEXT NOT NULL CHECK (target_type IN ('monthly', 'yearly', 'by_date')),
     target_amount INTEGER NOT NULL,
     target_date TEXT NOT NULL,
     recurrence_day INTEGER,

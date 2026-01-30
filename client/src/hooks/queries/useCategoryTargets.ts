@@ -22,7 +22,7 @@ async function fetchCategoryTarget(categoryId: string): Promise<CategoryTarget |
 async function createCategoryTarget(
   categoryId: string,
   data: {
-    targetType: 'monthly' | 'yearly';
+    targetType: 'monthly' | 'yearly' | 'by_date';
     targetAmount: number;
     targetDate: string;
     recurrenceDay?: number;
@@ -34,7 +34,7 @@ async function createCategoryTarget(
 async function updateCategoryTarget(
   categoryId: string,
   data: {
-    targetType?: 'monthly' | 'yearly';
+    targetType?: 'monthly' | 'yearly' | 'by_date';
     targetAmount?: number;
     targetDate?: string;
     recurrenceDay?: number | null;
@@ -64,7 +64,7 @@ export function useCreateCategoryTarget() {
     }: {
       categoryId: string;
       data: {
-        targetType: 'monthly' | 'yearly';
+        targetType: 'monthly' | 'yearly' | 'by_date';
         targetAmount: number;
         targetDate: string;
         recurrenceDay?: number;
@@ -87,7 +87,7 @@ export function useUpdateCategoryTarget() {
     }: {
       categoryId: string;
       data: {
-        targetType?: 'monthly' | 'yearly';
+        targetType?: 'monthly' | 'yearly' | 'by_date';
         targetAmount?: number;
         targetDate?: string;
         recurrenceDay?: number | null;

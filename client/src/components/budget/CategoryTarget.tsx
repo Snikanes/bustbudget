@@ -11,7 +11,7 @@ interface CategoryTargetProps {
   categoryId: string;
 }
 
-type TargetType = 'monthly' | 'yearly';
+type TargetType = 'monthly' | 'yearly' | 'by_date';
 
 function formatCurrency(amount: number): string {
   return new Intl.NumberFormat('nb-NO', {
@@ -124,9 +124,14 @@ function CategoryTarget({ categoryId }: CategoryTargetProps) {
     const currentYearMonth = new Date().toISOString().slice(0, 7);
     if (type === 'monthly') {
       setTargetDate(getLastDayOfMonth(currentYearMonth));
-    } else {
+    } else if (type === 'yearly') {
       const currentYear = new Date().getFullYear();
       setTargetDate(`${currentYear}-12-31`);
+    } else if (type === 'by_date') {
+      // Default to 6 months from now
+      const futureDate = new Date();
+      futureDate.setMonth(futureDate.getMonth() + 6);
+      setTargetDate(futureDate.toISOString().slice(0, 10));
     }
   };
 
@@ -174,7 +179,11 @@ function CategoryTarget({ categoryId }: CategoryTargetProps) {
             {formatCurrency(target.targetAmount)}
           </div>
           <div className="text-xs text-gray-500">
-            {target.targetType === 'monthly' ? 'Monthly' : 'Yearly'}
+            {target.targetType === 'monthly'
+              ? 'Monthly'
+              : target.targetType === 'yearly'
+              ? 'Yearly'
+              : `By ${new Date(target.targetDate).toLocaleDateString('nb-NO', { year: 'numeric', month: 'short' })}`}
           </div>
         </div>
       </div>
@@ -190,10 +199,10 @@ function CategoryTarget({ categoryId }: CategoryTargetProps) {
       </div>
 
       {/* Target Type Buttons */}
-      <div className="flex gap-2">
+      <div className="grid grid-cols-3 gap-2">
         <button
           onClick={() => handleTypeChange('monthly')}
-          className={`flex-1 px-3 py-1.5 text-sm rounded border transition-colors ${
+          className={`px-3 py-1.5 text-sm rounded border transition-colors ${
             targetType === 'monthly'
               ? 'bg-blue-600 text-white border-blue-600'
               : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
@@ -203,13 +212,23 @@ function CategoryTarget({ categoryId }: CategoryTargetProps) {
         </button>
         <button
           onClick={() => handleTypeChange('yearly')}
-          className={`flex-1 px-3 py-1.5 text-sm rounded border transition-colors ${
+          className={`px-3 py-1.5 text-sm rounded border transition-colors ${
             targetType === 'yearly'
               ? 'bg-blue-600 text-white border-blue-600'
               : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
           }`}
         >
           Yearly
+        </button>
+        <button
+          onClick={() => handleTypeChange('by_date')}
+          className={`px-3 py-1.5 text-sm rounded border transition-colors ${
+            targetType === 'by_date'
+              ? 'bg-blue-600 text-white border-blue-600'
+              : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+          }`}
+        >
+          By Date
         </button>
       </div>
 
@@ -228,9 +247,18 @@ function CategoryTarget({ categoryId }: CategoryTargetProps) {
       {/* Date Selector */}
       <div className="space-y-1">
         <label className="text-xs text-gray-600">By</label>
-        <div className="text-sm text-gray-700 px-3 py-2 bg-gray-50 rounded border border-gray-200">
-          {targetType === 'monthly' ? 'Last Day of Month' : 'December 31'}
-        </div>
+        {targetType === 'by_date' ? (
+          <input
+            type="date"
+            value={targetDate}
+            onChange={(e) => setTargetDate(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        ) : (
+          <div className="text-sm text-gray-700 px-3 py-2 bg-gray-50 rounded border border-gray-200">
+            {targetType === 'monthly' ? 'Last Day of Month' : 'December 31'}
+          </div>
+        )}
       </div>
 
       {/* Action Buttons */}
