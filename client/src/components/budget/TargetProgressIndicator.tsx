@@ -3,11 +3,13 @@ import { CategoryTarget } from '@/types';
 interface TargetProgressIndicatorProps {
   target: CategoryTarget;
   available: number;
+  currentMonth: string;
 }
 
 function TargetProgressIndicator({
   target,
   available,
+  currentMonth,
 }: TargetProgressIndicatorProps) {
   // Calculate remaining amount needed
   const remaining = Math.max(0, target.targetAmount - available);
@@ -15,31 +17,46 @@ function TargetProgressIndicator({
   // Calculate progress percentage
   const progress = Math.min(100, Math.max(0, (available / target.targetAmount) * 100));
 
-  // Format amount in Norwegian style (space as thousands separator, comma as decimal)
-  const formatAmount = (amount: number) => {
-    const amountInKr = amount / 100;
-    return amountInKr.toLocaleString('nb-NO', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
+  // Determine if on track for by_date targets
+  const isOnTrack = () => {
+    if (target.targetType === 'by_date') {
+      const currentDate = new Date(currentMonth + '-01');
+      const targetDate = new Date(target.targetDate);
+
+      // Calculate total months from start to target
+      const monthsRemaining = Math.max(
+        1,
+        (targetDate.getFullYear() - currentDate.getFullYear()) * 12 +
+          (targetDate.getMonth() - currentDate.getMonth()) +
+          1
+      );
+
+      // Rough estimate: assume we started with 0 and should have saved proportionally
+      const totalMonths = monthsRemaining + 6; // Rough estimate of total time
+      const elapsedMonths = totalMonths - monthsRemaining;
+      const expectedByNow = (target.targetAmount / totalMonths) * elapsedMonths;
+
+      // On track if we've saved at least 90% of expected amount
+      return available >= expectedByNow * 0.9;
+    }
+    return false;
   };
 
-  // Get the day with ordinal suffix
-  const getDayWithSuffix = (date: Date) => {
-    const day = date.getDate();
-    return `${day}th`;
-  };
-
-  // Get target date display
-  const getTargetDateText = () => {
-    const targetDate = new Date(target.targetDate);
-    return getDayWithSuffix(targetDate);
+  // Determine progress bar color
+  const getBarColor = () => {
+    if (target.targetType === 'by_date') {
+      // Green if on track, yellow otherwise
+      return isOnTrack() ? 'bg-green-500' : 'bg-yellow-500';
+    } else {
+      // Recurring targets: green if fully funded (available >= target)
+      return available >= target.targetAmount ? 'bg-green-500' : 'bg-yellow-500';
+    }
   };
 
   return (
     <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
       <div
-        className="h-full bg-yellow-500 transition-all duration-300"
+        className={`h-full ${getBarColor()} transition-all duration-300`}
         style={{ width: `${progress}%` }}
       />
     </div>

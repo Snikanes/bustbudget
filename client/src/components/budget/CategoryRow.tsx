@@ -62,6 +62,7 @@ function CategoryRow({ category, month }: CategoryRowProps) {
             <TargetProgressIndicator
               target={category.target}
               available={category.available}
+              currentMonth={month}
             />
           )}
         </div>
