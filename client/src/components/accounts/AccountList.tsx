@@ -1,14 +1,31 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Plus } from 'lucide-react';
-import { useAccounts } from '@/hooks/queries/useAccounts';
+import { useAccounts, useUpdateAccount } from '@/hooks/queries/useAccounts';
 import { formatNOK } from '@/utils/currency';
 import AddAccountModal from './AddAccountModal';
+import TextInput from '@/components/shared/TextInput';
 
 function AccountList() {
   const { accountId } = useParams();
   const { data: accounts, isLoading } = useAccounts();
   const [showModal, setShowModal] = useState(false);
+  const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
+  const updateAccount = useUpdateAccount();
+
+  const handleNameChange = (accountId: string, newName: string) => {
+    if (newName) {
+      updateAccount.mutate({
+        id: accountId,
+        name: newName,
+      });
+    }
+    setEditingAccountId(null);
+  };
+
+  const validateName = (name: string) => {
+    return name.trim().length > 0 && name.trim().length <= 100;
+  };
 
   if (isLoading) {
     return (
@@ -44,7 +61,30 @@ function AccountList() {
                 : 'text-slate-300 hover:bg-slate-700 hover:text-white'
             }`}
           >
-            <span className="truncate">{account.name}</span>
+            {editingAccountId === account.id ? (
+              <div onClick={(e) => e.stopPropagation()}>
+                <TextInput
+                  value={account.name}
+                  onChange={(newName) => handleNameChange(account.id, newName)}
+                  onCancel={() => setEditingAccountId(null)}
+                  validate={validateName}
+                  autoFocus
+                  selectAllOnFocus
+                  className="bg-slate-800 text-white text-sm px-2 py-1"
+                />
+              </div>
+            ) : (
+              <span
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  setEditingAccountId(account.id);
+                }}
+                className="truncate cursor-pointer hover:bg-slate-600 px-2 -mx-2 rounded transition-colors"
+              >
+                {account.name}
+              </span>
+            )}
             <span className={`text-sm ${account.balance < 0 ? 'text-red-400' : 'text-slate-400'}`}>
               {formatNOK(account.balance)}
             </span>

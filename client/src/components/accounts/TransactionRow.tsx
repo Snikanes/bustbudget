@@ -3,15 +3,20 @@ import { Check, Circle, Trash2 } from 'lucide-react';
 import { Transaction } from '@/types';
 import { formatNOK } from '@/utils/currency';
 import { useUpdateTransaction, useDeleteTransaction } from '@/hooks/queries/useTransactions';
+import DateInput from '@/components/shared/DateInput';
+import CategorySelect from '@/components/shared/CategorySelect';
+import CurrencyInput from '@/components/shared/CurrencyInput';
+import TextInput from '@/components/shared/TextInput';
 
 interface TransactionRowProps {
   transaction: Transaction;
 }
 
+type EditingField = 'date' | 'payee' | 'category' | 'outflow' | 'inflow' | 'memo' | null;
+
 function TransactionRow({ transaction }: TransactionRowProps) {
-  const [isEditing, setIsEditing] = useState(false);
+  const [editingField, setEditingField] = useState<EditingField>(null);
   const [isSelected, setIsSelected] = useState(false);
-  const [editedMemo, setEditedMemo] = useState(transaction.memo || '');
   const rowRef = useRef<HTMLDivElement>(null);
   const updateTransaction = useUpdateTransaction();
   const deleteTransaction = useDeleteTransaction();
@@ -20,7 +25,12 @@ function TransactionRow({ transaction }: TransactionRowProps) {
   const isTransfer = transaction.transferId !== null;
   const isStartingBalance = transaction.isStartingBalance;
 
-  const canEditMemo = true; // Memo is always editable
+  // Field-level editability
+  const canEditDate = !isCleared;
+  const canEditPayee = !isCleared;
+  const canEditCategory = !isCleared && !isTransfer;
+  const canEditAmount = !isCleared; // Allow editing for all uncleared transactions
+  const canEditMemo = true; // Always editable
 
   // Handle click outside to deselect
   useEffect(() => {
@@ -52,14 +62,16 @@ function TransactionRow({ transaction }: TransactionRowProps) {
     });
   };
 
-  const handleMemoSave = () => {
-    if (editedMemo !== transaction.memo) {
-      updateTransaction.mutate({
-        id: transaction.id,
-        memo: editedMemo,
-      });
-    }
-    setIsEditing(false);
+  const handleOutflowChange = (value: number) => {
+    const newAmount = -Math.abs(value); // Always negative
+    updateTransaction.mutate({ id: transaction.id, amount: newAmount });
+    setEditingField(null);
+  };
+
+  const handleInflowChange = (value: number) => {
+    const newAmount = Math.abs(value); // Always positive
+    updateTransaction.mutate({ id: transaction.id, amount: newAmount });
+    setEditingField(null);
   };
 
   const handleDelete = () => {
@@ -100,44 +112,103 @@ function TransactionRow({ transaction }: TransactionRowProps) {
     >
       {/* Date */}
       <div className="text-sm text-gray-700">
-        {new Date(transaction.date).toLocaleDateString('nb-NO')}
+        {editingField === 'date' ? (
+          <DateInput
+            value={transaction.date}
+            onChange={(value) => {
+              updateTransaction.mutate({ id: transaction.id, date: value });
+              setEditingField(null);
+            }}
+            onCancel={() => setEditingField(null)}
+            autoFocus
+            className="text-sm"
+          />
+        ) : (
+          <span
+            onClick={(e) => {
+              e.stopPropagation();
+              if (canEditDate) setEditingField('date');
+            }}
+            className={`block ${canEditDate ? 'cursor-pointer hover:bg-blue-50 px-1 -mx-1 rounded' : ''}`}
+          >
+            {new Date(transaction.date).toLocaleDateString('nb-NO')}
+          </span>
+        )}
       </div>
 
       {/* Payee */}
       <div className="text-sm truncate">
-        {transaction.payee || '-'}
+        {editingField === 'payee' ? (
+          <TextInput
+            value={transaction.payee || ''}
+            onChange={(value) => {
+              updateTransaction.mutate({ id: transaction.id, payee: value || null });
+              setEditingField(null);
+            }}
+            onCancel={() => setEditingField(null)}
+            autoFocus
+            className="text-sm"
+          />
+        ) : (
+          <span
+            onClick={(e) => {
+              e.stopPropagation();
+              if (canEditPayee) setEditingField('payee');
+            }}
+            className={`truncate block ${canEditPayee ? 'cursor-pointer hover:bg-blue-50 px-1 -mx-1 rounded' : ''}`}
+          >
+            {transaction.payee || '-'}
+          </span>
+        )}
       </div>
 
       {/* Category */}
       <div className={`text-sm truncate ${
         isMissingCategory ? 'text-red-600 font-medium' : 'text-gray-600'
       }`}>
-        {isMissingCategory ? 'No category' : categoryDisplay || '-'}
-      </div>
-
-      {/* Memo */}
-      <div className="text-sm">
-        {isEditing ? (
-          <input
-            type="text"
-            value={editedMemo}
-            onChange={(e) => setEditedMemo(e.target.value)}
-            onBlur={handleMemoSave}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') handleMemoSave();
-              if (e.key === 'Escape') {
-                setEditedMemo(transaction.memo || '');
-                setIsEditing(false);
-              }
+        {editingField === 'category' ? (
+          <CategorySelect
+            value={transaction.categoryId}
+            onChange={(value) => {
+              updateTransaction.mutate({ id: transaction.id, categoryId: value });
+              setEditingField(null);
             }}
+            onCancel={() => setEditingField(null)}
+            allowNull
             autoFocus
-            className="w-full px-1 py-0.5 border border-blue-500 rounded text-sm"
+            className="text-sm"
           />
         ) : (
           <span
             onClick={(e) => {
               e.stopPropagation();
-              if (canEditMemo) setIsEditing(true);
+              if (canEditCategory) setEditingField('category');
+            }}
+            className={`truncate block ${canEditCategory ? 'cursor-pointer hover:bg-blue-50 px-1 -mx-1 rounded' : ''}`}
+          >
+            {isMissingCategory ? 'No category' : categoryDisplay || '-'}
+          </span>
+        )}
+      </div>
+
+      {/* Memo */}
+      <div className="text-sm">
+        {editingField === 'memo' ? (
+          <TextInput
+            value={transaction.memo || ''}
+            onChange={(value) => {
+              updateTransaction.mutate({ id: transaction.id, memo: value || null });
+              setEditingField(null);
+            }}
+            onCancel={() => setEditingField(null)}
+            autoFocus
+            className="text-sm"
+          />
+        ) : (
+          <span
+            onClick={(e) => {
+              e.stopPropagation();
+              if (canEditMemo) setEditingField('memo');
             }}
             className={`truncate block ${canEditMemo ? 'cursor-pointer hover:bg-blue-50 px-1 -mx-1 rounded' : ''}`}
           >
@@ -148,12 +219,52 @@ function TransactionRow({ transaction }: TransactionRowProps) {
 
       {/* Outflow */}
       <div className="text-sm text-right text-red-600">
-        {outflow > 0 ? formatNOK(outflow) : ''}
+        {editingField === 'outflow' ? (
+          <CurrencyInput
+            value={Math.abs(transaction.amount)}
+            onChange={handleOutflowChange}
+            onCancel={() => setEditingField(null)}
+            autoFocus
+            className="text-sm text-right text-red-600"
+          />
+        ) : outflow > 0 ? (
+          <span
+            onClick={(e) => {
+              e.stopPropagation();
+              if (canEditAmount) setEditingField('outflow');
+            }}
+            className={`block ${canEditAmount ? 'cursor-pointer hover:bg-blue-50 px-1 -mx-1 rounded' : ''}`}
+          >
+            {formatNOK(outflow)}
+          </span>
+        ) : (
+          ''
+        )}
       </div>
 
       {/* Inflow */}
       <div className="text-sm text-right text-green-600">
-        {displayInflow > 0 ? formatNOK(displayInflow) : ''}
+        {editingField === 'inflow' ? (
+          <CurrencyInput
+            value={displayInflow}
+            onChange={handleInflowChange}
+            onCancel={() => setEditingField(null)}
+            autoFocus
+            className="text-sm text-right text-green-600"
+          />
+        ) : displayInflow > 0 ? (
+          <span
+            onClick={(e) => {
+              e.stopPropagation();
+              if (canEditAmount) setEditingField('inflow');
+            }}
+            className={`block ${canEditAmount ? 'cursor-pointer hover:bg-blue-50 px-1 -mx-1 rounded' : ''}`}
+          >
+            {formatNOK(displayInflow)}
+          </span>
+        ) : (
+          ''
+        )}
       </div>
 
       {/* Cleared */}
