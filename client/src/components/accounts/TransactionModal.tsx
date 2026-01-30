@@ -1,7 +1,8 @@
 import { useState, FormEvent } from 'react';
 import { X } from 'lucide-react';
-import { useCreateTransaction } from '@/hooks/queries/useTransactions';
-import { useCategories } from '@/hooks/queries/useCategories';
+import { useCreateTransaction, useCreateTransfer } from '@/hooks/queries/useTransactions';
+import { useCategoryGroups } from '@/hooks/queries/useCategories';
+import { useAccounts } from '@/hooks/queries/useAccounts';
 
 interface TransactionModalProps {
   accountId: string;
@@ -18,7 +19,34 @@ function TransactionModal({ accountId, onClose }: TransactionModalProps) {
   const [isCleared, setIsCleared] = useState(false);
 
   const createTransaction = useCreateTransaction();
-  const { data: categories } = useCategories();
+  const createTransfer = useCreateTransfer();
+  const { data: categoryGroups } = useCategoryGroups();
+  const { data: accounts } = useAccounts();
+
+  // Filter accounts for transfer options
+  const transferAccounts = accounts
+    ?.filter(account => !account.isClosed && account.id !== accountId)
+    .sort((a, b) => a.name.localeCompare(b.name)) || [];
+
+  // Check if transfer is selected and get destination account
+  const isTransferSelected = categoryId && categoryId.startsWith('transfer:');
+  const destinationAccountId = isTransferSelected ? categoryId.replace('transfer:', '') : null;
+  const destinationAccount = destinationAccountId
+    ? accounts?.find(acc => acc.id === destinationAccountId)
+    : null;
+  const transferPayee = destinationAccount ? `Transfer: ${destinationAccount.name}` : '';
+
+  const handleCategoryChange = (value: string) => {
+    const wasTransfer = categoryId && categoryId.startsWith('transfer:');
+    const isNowTransfer = value && value.startsWith('transfer:');
+
+    // Clear payee when switching to/from transfer
+    if (wasTransfer !== isNowTransfer) {
+      setPayee('');
+    }
+
+    setCategoryId(value);
+  };
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -27,22 +55,49 @@ function TransactionModal({ accountId, onClose }: TransactionModalProps) {
     const inflowAmount = parseFloat(inflow.replace(',', '.')) * 100 || 0;
     const amount = inflowAmount - outflowAmount;
 
-    createTransaction.mutate(
-      {
-        accountId,
-        date,
-        amount,
-        payee: payee || undefined,
-        categoryId: categoryId || undefined,
-        memo: memo || undefined,
-        isCleared,
-      },
-      {
-        onSuccess: () => {
-          onClose();
+    // Check if a transfer was selected
+    if (categoryId && categoryId.startsWith('transfer:')) {
+      const targetAccountId = categoryId.replace('transfer:', '');
+      const transferAmount = Math.abs(amount);
+
+      // Determine direction based on amount sign
+      const fromAccountId = amount < 0 ? accountId : targetAccountId;
+      const toAccountId = amount < 0 ? targetAccountId : accountId;
+
+      createTransfer.mutate(
+        {
+          fromAccountId,
+          toAccountId,
+          amount: transferAmount,
+          date,
+          memo: memo || undefined,
+          isCleared,
         },
-      }
-    );
+        {
+          onSuccess: () => {
+            onClose();
+          },
+        }
+      );
+    } else {
+      // Create regular transaction
+      createTransaction.mutate(
+        {
+          accountId,
+          date,
+          amount,
+          payee: payee || undefined,
+          categoryId: categoryId || undefined,
+          memo: memo || undefined,
+          isCleared,
+        },
+        {
+          onSuccess: () => {
+            onClose();
+          },
+        }
+      );
+    }
   };
 
   return (
@@ -81,10 +136,13 @@ function TransactionModal({ accountId, onClose }: TransactionModalProps) {
             </label>
             <input
               type="text"
-              value={payee}
+              value={isTransferSelected ? transferPayee : payee}
               onChange={(e) => setPayee(e.target.value)}
               placeholder="Who did you pay?"
-              className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={isTransferSelected}
+              className={`w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                isTransferSelected ? 'bg-gray-100 cursor-not-allowed' : ''
+              }`}
             />
           </div>
 
@@ -95,15 +153,30 @@ function TransactionModal({ accountId, onClose }: TransactionModalProps) {
             </label>
             <select
               value={categoryId}
-              onChange={(e) => setCategoryId(e.target.value)}
+              onChange={(e) => handleCategoryChange(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">Select category...</option>
-              {categories?.map((cat) => (
-                <option key={cat.id} value={cat.id}>
-                  {cat.name}
-                </option>
+
+              {categoryGroups?.map((group) => (
+                <optgroup key={group.id} label={group.name}>
+                  {group.categories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
+
+              {transferAccounts.length > 0 && (
+                <optgroup label="Transfers">
+                  {transferAccounts.map((account) => (
+                    <option key={account.id} value={`transfer:${account.id}`}>
+                      Transfer: {account.name}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
             </select>
           </div>
 
@@ -180,10 +253,10 @@ function TransactionModal({ accountId, onClose }: TransactionModalProps) {
             </button>
             <button
               type="submit"
-              disabled={createTransaction.isPending}
+              disabled={createTransaction.isPending || createTransfer.isPending}
               className="flex-1 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors disabled:opacity-50"
             >
-              {createTransaction.isPending ? 'Saving...' : 'Save'}
+              {createTransaction.isPending || createTransfer.isPending ? 'Saving...' : 'Save'}
             </button>
           </div>
         </form>
