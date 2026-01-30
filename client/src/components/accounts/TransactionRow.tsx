@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Check, Circle, Trash2 } from 'lucide-react';
 import { Transaction } from '@/types';
 import { formatNOK } from '@/utils/currency';
-import { useUpdateTransaction, useDeleteTransaction } from '@/hooks/queries/useTransactions';
+import { useUpdateTransaction, useDeleteTransaction, useCreateTransfer } from '@/hooks/queries/useTransactions';
 import DateInput from '@/components/shared/DateInput';
 import CategorySelect from '@/components/shared/CategorySelect';
 import CurrencyInput from '@/components/shared/CurrencyInput';
@@ -10,16 +10,18 @@ import TextInput from '@/components/shared/TextInput';
 
 interface TransactionRowProps {
   transaction: Transaction;
+  currentAccountId: string;
 }
 
 type EditingField = 'date' | 'payee' | 'category' | 'outflow' | 'inflow' | 'memo' | null;
 
-function TransactionRow({ transaction }: TransactionRowProps) {
+function TransactionRow({ transaction, currentAccountId }: TransactionRowProps) {
   const [editingField, setEditingField] = useState<EditingField>(null);
   const [isSelected, setIsSelected] = useState(false);
   const rowRef = useRef<HTMLDivElement>(null);
   const updateTransaction = useUpdateTransaction();
   const deleteTransaction = useDeleteTransaction();
+  const createTransfer = useCreateTransfer();
 
   const isCleared = transaction.isCleared;
   const isTransfer = transaction.transferId !== null;
@@ -78,6 +80,50 @@ function TransactionRow({ transaction }: TransactionRowProps) {
     if (confirm('Are you sure you want to delete this transaction?')) {
       deleteTransaction.mutate(transaction.id);
     }
+  };
+
+  const handleCategoryChange = (value: string | null) => {
+    if (value && value.startsWith('transfer:')) {
+      const targetAccountId = value.replace('transfer:', '');
+      handleConvertToTransfer(targetAccountId);
+    } else {
+      updateTransaction.mutate({ id: transaction.id, categoryId: value });
+      setEditingField(null);
+    }
+  };
+
+  const handleConvertToTransfer = (targetAccountId: string) => {
+    const amount = Math.abs(transaction.amount);
+
+    // Determine direction based on transaction sign
+    const fromAccountId = transaction.amount < 0 ? currentAccountId : targetAccountId;
+    const toAccountId = transaction.amount < 0 ? targetAccountId : currentAccountId;
+
+    // Delete transaction, then create transfer
+    deleteTransaction.mutate(transaction.id, {
+      onSuccess: () => {
+        createTransfer.mutate(
+          {
+            fromAccountId,
+            toAccountId,
+            amount,
+            date: transaction.date,
+            memo: transaction.memo || undefined,
+            isCleared: transaction.isCleared,
+          },
+          {
+            onError: (error) => {
+              console.error('Failed to create transfer:', error);
+              alert('Transaction was deleted but transfer creation failed. Please create the transfer manually.');
+            },
+          }
+        );
+      },
+      onError: (error) => {
+        console.error('Failed to delete transaction:', error);
+        alert('Failed to convert to transfer. Please try again.');
+      },
+    });
   };
 
   const outflow = transaction.amount < 0 ? Math.abs(transaction.amount) : 0;
@@ -169,11 +215,9 @@ function TransactionRow({ transaction }: TransactionRowProps) {
         {editingField === 'category' ? (
           <CategorySelect
             value={transaction.categoryId}
-            onChange={(value) => {
-              updateTransaction.mutate({ id: transaction.id, categoryId: value });
-              setEditingField(null);
-            }}
+            onChange={handleCategoryChange}
             onCancel={() => setEditingField(null)}
+            currentAccountId={currentAccountId}
             allowNull
             autoFocus
             className="text-sm"

@@ -44,6 +44,7 @@ function TransactionTable({ accountId, transactions }: TransactionTableProps) {
           <TransactionRow
             key={transaction.id}
             transaction={transaction}
+            currentAccountId={accountId}
           />
         ))}
 

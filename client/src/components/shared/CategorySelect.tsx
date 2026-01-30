@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, KeyboardEvent } from 'react';
 import { useCategoryGroups } from '@/hooks/queries/useCategories';
+import { useAccounts } from '@/hooks/queries/useAccounts';
 
 interface CategorySelectProps {
   value: string | null;    // categoryId or null
@@ -9,6 +10,7 @@ interface CategorySelectProps {
   autoFocus?: boolean;
   allowNull?: boolean;     // Allow "Clear category" option
   className?: string;
+  currentAccountId?: string;  // For filtering transfer accounts
 }
 
 function CategorySelect({
@@ -19,10 +21,20 @@ function CategorySelect({
   autoFocus = true,
   allowNull = false,
   className = '',
+  currentAccountId,
 }: CategorySelectProps) {
   const [inputValue, setInputValue] = useState(value || '');
   const selectRef = useRef<HTMLSelectElement>(null);
   const { data: categoryGroups } = useCategoryGroups();
+  const { data: accounts } = useAccounts();
+
+  // Filter accounts for transfer options
+  const transferAccounts = accounts
+    ?.filter(account =>
+      !account.isClosed &&
+      account.id !== currentAccountId
+    )
+    .sort((a, b) => a.name.localeCompare(b.name)) || [];
 
   useEffect(() => {
     if (autoFocus && selectRef.current) {
@@ -73,6 +85,16 @@ function CategorySelect({
           ))}
         </optgroup>
       ))}
+
+      {transferAccounts.length > 0 && (
+        <optgroup label="Transfers">
+          {transferAccounts.map((account) => (
+            <option key={account.id} value={`transfer:${account.id}`}>
+              Transfer: {account.name}
+            </option>
+          ))}
+        </optgroup>
+      )}
     </select>
   );
 }
