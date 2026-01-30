@@ -221,6 +221,7 @@ npm run dev  # Starts both frontend and backend
 ### Making Changes
 
 1. **Database changes:**
+   - **IMPORTANT:** Always run `./scripts/backup-db.sh` before making schema changes
    - Update `server/src/db/schema.sql`
    - Delete database file to recreate: `rm server/data/budget.db`
    - Or write migration script
@@ -363,6 +364,9 @@ Priority improvements tracked in TODO.md:
 ## Helpful Commands
 
 ```bash
+# Backup database (ALWAYS do this before schema changes)
+./scripts/backup-db.sh
+
 # View database schema
 sqlite3 server/data/budget.db ".schema"
 
