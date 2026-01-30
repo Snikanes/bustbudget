@@ -22,22 +22,32 @@ function TargetProgressIndicator({
     if (target.targetType === 'by_date') {
       const currentDate = new Date(currentMonth + '-01');
       const targetDate = new Date(target.targetDate);
+      const createdDate = new Date(target.createdAt);
 
-      // Calculate total months from start to target
-      const monthsRemaining = Math.max(
+      // Use the first of the month for the created date
+      const createdMonth = new Date(createdDate.getFullYear(), createdDate.getMonth(), 1);
+
+      // Calculate total months from creation to target
+      const totalMonths = Math.max(
         1,
-        (targetDate.getFullYear() - currentDate.getFullYear()) * 12 +
-          (targetDate.getMonth() - currentDate.getMonth()) +
+        (targetDate.getFullYear() - createdMonth.getFullYear()) * 12 +
+          (targetDate.getMonth() - createdMonth.getMonth()) +
           1
       );
 
-      // Rough estimate: assume we started with 0 and should have saved proportionally
-      const totalMonths = monthsRemaining + 6; // Rough estimate of total time
-      const elapsedMonths = totalMonths - monthsRemaining;
-      const expectedByNow = (target.targetAmount / totalMonths) * elapsedMonths;
+      // Calculate months elapsed since creation
+      const monthsElapsed = Math.max(
+        1,
+        (currentDate.getFullYear() - createdMonth.getFullYear()) * 12 +
+          (currentDate.getMonth() - createdMonth.getMonth()) +
+          1
+      );
 
-      // On track if we've saved at least 90% of expected amount
-      return available >= expectedByNow * 0.9;
+      // Calculate expected progress by now (linear progression)
+      const expectedProgress = (target.targetAmount / totalMonths) * monthsElapsed;
+
+      // On track if available >= expected progress
+      return available >= expectedProgress;
     }
     return false;
   };
@@ -66,6 +76,7 @@ function TargetProgressIndicator({
 export function TargetProgressText({
   target,
   available,
+  currentMonth,
 }: TargetProgressIndicatorProps) {
   const remaining = Math.max(0, target.targetAmount - available);
 
@@ -82,8 +93,52 @@ export function TargetProgressText({
     return `${day}th`;
   };
 
+  // Check if on track for by_date targets
+  const isOnTrack = () => {
+    if (target.targetType === 'by_date') {
+      const currentDate = new Date(currentMonth + '-01');
+      const targetDate = new Date(target.targetDate);
+      const createdDate = new Date(target.createdAt);
+
+      // Use the first of the month for the created date
+      const createdMonth = new Date(createdDate.getFullYear(), createdDate.getMonth(), 1);
+
+      // Calculate total months from creation to target
+      const totalMonths = Math.max(
+        1,
+        (targetDate.getFullYear() - createdMonth.getFullYear()) * 12 +
+          (targetDate.getMonth() - createdMonth.getMonth()) +
+          1
+      );
+
+      // Calculate months elapsed since creation
+      const monthsElapsed = Math.max(
+        1,
+        (currentDate.getFullYear() - createdMonth.getFullYear()) * 12 +
+          (currentDate.getMonth() - createdMonth.getMonth()) +
+          1
+      );
+
+      // Calculate expected progress by now (linear progression)
+      const expectedProgress = (target.targetAmount / totalMonths) * monthsElapsed;
+
+      // On track if available >= expected progress
+      return available >= expectedProgress;
+    }
+    return false;
+  };
+
   if (remaining <= 0) {
     return null; // Target met, don't show text
+  }
+
+  // Show "On track" for by_date targets that are on track
+  if (target.targetType === 'by_date' && isOnTrack()) {
+    return (
+      <span className="text-green-600 text-sm font-medium">
+        On track
+      </span>
+    );
   }
 
   const targetDate = new Date(target.targetDate);
