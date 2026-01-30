@@ -55,6 +55,14 @@ export interface MonthlyBudgetRow {
   updated_at: string;
 }
 
+export interface PayeeRow {
+  id: string;
+  name: string;
+  last_category_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // API response types (camelCase, with computed fields)
 export interface Account {
   id: string;
@@ -120,6 +128,14 @@ export interface MonthlyBudget {
   categoryId: string;
   yearMonth: string;
   assignedAmount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Payee {
+  id: string;
+  name: string;
+  lastCategoryId: string | null;
   createdAt: string;
   updatedAt: string;
 }

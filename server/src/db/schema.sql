@@ -22,6 +22,18 @@ CREATE TABLE IF NOT EXISTS category_group (
 
 CREATE INDEX IF NOT EXISTS idx_category_group_sort ON category_group(sort_order);
 
+-- Payee table (stores payee-category associations for auto-fill)
+CREATE TABLE IF NOT EXISTS "payee" (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    last_category_id TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (last_category_id) REFERENCES category(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_payee_name ON payee(name);
+
 -- Category table
 CREATE TABLE IF NOT EXISTS category (
     id TEXT PRIMARY KEY,
@@ -115,6 +127,13 @@ CREATE TRIGGER IF NOT EXISTS trg_category_updated
     FOR EACH ROW
 BEGIN
     UPDATE category SET updated_at = datetime('now') WHERE id = NEW.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_payee_updated
+    AFTER UPDATE ON payee
+    FOR EACH ROW
+BEGIN
+    UPDATE payee SET updated_at = datetime('now') WHERE id = NEW.id;
 END;
 
 CREATE TRIGGER IF NOT EXISTS trg_transaction_updated

@@ -88,3 +88,9 @@ export interface Transfer {
   memo: string | null;
   createdAt: string;
 }
+
+export interface Payee {
+  id: string;
+  name: string;
+  lastCategoryId: string | null;
+}

@@ -3,6 +3,7 @@ import { X } from 'lucide-react';
 import { useCreateTransaction, useCreateTransfer } from '@/hooks/queries/useTransactions';
 import { useCategoryGroups } from '@/hooks/queries/useCategories';
 import { useAccounts } from '@/hooks/queries/useAccounts';
+import PayeeSelect from '@/components/shared/PayeeSelect';
 
 interface TransactionModalProps {
   accountId: string;
@@ -36,9 +37,17 @@ function TransactionModal({ accountId, onClose }: TransactionModalProps) {
     : null;
   const transferPayee = destinationAccount ? `Transfer: ${destinationAccount.name}` : '';
 
+  const handlePayeeChange = (name: string, lastCategoryId: string | null) => {
+    setPayee(name);
+    // Auto-fill category if payee has a remembered category and no category is selected
+    if (lastCategoryId && !categoryId) {
+      setCategoryId(lastCategoryId);
+    }
+  };
+
   const handleCategoryChange = (value: string) => {
-    const wasTransfer = categoryId && categoryId.startsWith('transfer:');
-    const isNowTransfer = value && value.startsWith('transfer:');
+    const wasTransfer = Boolean(categoryId && categoryId.startsWith('transfer:'));
+    const isNowTransfer = Boolean(value && value.startsWith('transfer:'));
 
     // Clear payee when switching to/from transfer
     if (wasTransfer !== isNowTransfer) {
@@ -134,15 +143,11 @@ function TransactionModal({ accountId, onClose }: TransactionModalProps) {
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Payee
             </label>
-            <input
-              type="text"
+            <PayeeSelect
               value={isTransferSelected ? transferPayee : payee}
-              onChange={(e) => setPayee(e.target.value)}
+              onChange={handlePayeeChange}
+              disabled={!!isTransferSelected}
               placeholder="Who did you pay?"
-              disabled={isTransferSelected}
-              className={`w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                isTransferSelected ? 'bg-gray-100 cursor-not-allowed' : ''
-              }`}
             />
           </div>
 

@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Transaction, Transfer } from '@/types';
 import { api } from '@/api/client';
 import { accountKeys } from './useAccounts';
+import { payeeKeys } from './usePayees';
 
 export const transactionKeys = {
   all: ['transactions'] as const,
@@ -49,6 +50,7 @@ export function useCreateTransaction() {
         queryKey: transactionKeys.byAccount(variables.accountId),
       });
       queryClient.invalidateQueries({ queryKey: accountKeys.all });
+      queryClient.invalidateQueries({ queryKey: payeeKeys.all });
     },
   });
 }
@@ -77,6 +79,7 @@ export function useUpdateTransaction() {
         queryKey: transactionKeys.byAccount(transaction.accountId),
       });
       queryClient.invalidateQueries({ queryKey: accountKeys.all });
+      queryClient.invalidateQueries({ queryKey: payeeKeys.all });
     },
   });
 }

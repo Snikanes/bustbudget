@@ -7,6 +7,7 @@ import {
   UpdateTransactionRequest,
 } from '../models/types.js';
 import { NotFoundError, ValidationError, BusinessRuleError } from '../middleware/errorHandler.js';
+import { upsertPayee } from './payeeService.js';
 
 interface TransactionWithJoins extends TransactionRow {
   category_name: string | null;
@@ -120,6 +121,11 @@ export function createTransaction(accountId: string, data: CreateTransactionRequ
     now
   );
 
+  // Update payee-category association if both payee and category are provided
+  if (data.payee && data.categoryId) {
+    upsertPayee(data.payee, data.categoryId);
+  }
+
   return getTransactionById(id);
 }
 
@@ -216,7 +222,14 @@ export function updateTransaction(id: string, data: UpdateTransactionRequest): T
     db.prepare(`UPDATE "transaction" SET ${updates.join(', ')} WHERE id = ?`).run(...params);
   }
 
-  return getTransactionById(id);
+  // Update payee-category association if payee or categoryId changed
+  // Get the final state of the transaction to determine payee and category
+  const updated = getTransactionById(id);
+  if (updated.payee && updated.categoryId && !updated.transferId) {
+    upsertPayee(updated.payee, updated.categoryId);
+  }
+
+  return updated;
 }
 
 export function deleteTransaction(id: string): void {
