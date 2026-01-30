@@ -238,10 +238,12 @@ npm run dev  # Starts both frontend and backend
 
 ### Commit Guidelines
 
+- **IMPORTANT:** Always wait for user confirmation before committing
 - Use imperative mood ("Add feature" not "Added feature")
 - Include detailed description in commit body
 - Group related changes in single commit
 - End commits with: `Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>`
+- Never commit automatically - always ask user first
 
 ## Recent Major Features
 

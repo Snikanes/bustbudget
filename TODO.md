@@ -88,6 +88,7 @@
 
 ## Notes
 
+- **IMPORTANT:** Wait for user confirmation before committing changes
 - Each item should be implemented in a separate commit
 - Test thoroughly before committing
 - Update this list as new ideas come up
