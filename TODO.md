@@ -9,11 +9,11 @@
 - [ ] Store width in localStorage separately from left sidebar
 
 ### 2. Show Target Progress in Budget View
-- [ ] Add visual progress indicators to budget table rows
-- [ ] Show progress bar or percentage for categories with targets
-- [ ] Display "X months remaining" for by_date targets
-- [ ] Color-code based on progress (e.g., green if on track, red if behind)
-- [ ] Show monthly amount needed for by_date targets in tooltip/indicator
+- [x] Add visual progress indicators to budget table rows
+- [x] Show progress bar or percentage for categories with targets
+- [x] Display "X months remaining" for by_date targets
+- [x] Color-code based on progress (e.g., green if on track, red if behind)
+- [x] Show monthly amount needed for by_date targets in tooltip/indicator
 
 ### 3. Target Date Validation for by_date Targets
 - [ ] Prevent selecting dates in the past when creating/editing targets
@@ -82,6 +82,7 @@
 - [x] By_date target with smart monthly calculation
 - [x] Calculation accounts for existing available amount
 - [x] Resizable left sidebar with persistent width
+- [x] Target progress indicators in budget view (yellow progress bars + "X more needed by the Xth")
 
 ---
 
