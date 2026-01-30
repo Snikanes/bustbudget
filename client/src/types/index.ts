@@ -112,10 +112,20 @@ export interface ImportTransactionItem {
   amount: number;
   payee?: string;
   memo?: string;
+  categoryId?: string;
 }
 
 export interface ImportTransactionsResponse {
   imported: number;
   skipped: number;
   transactions: Transaction[];
+}
+
+export interface ImportPayeeMapping {
+  id: string;
+  originalPayee: string;
+  mappedPayee: string;
+  categoryId: string | null;
+  createdAt: string;
+  updatedAt: string;
 }

@@ -35,7 +35,24 @@ export function initializeDatabase(): void {
     db.exec(schema);
   }
 
+  // Run migrations for existing databases
+  runMigrations();
+
   console.log('Database initialized at', DB_PATH);
+}
+
+function runMigrations(): void {
+  // Migration: Add category_id to import_payee_mapping if it doesn't exist
+  const tableInfo = db.prepare("PRAGMA table_info(import_payee_mapping)").all() as Array<{ name: string }>;
+  const hasCategory = tableInfo.some((col) => col.name === 'category_id');
+
+  if (tableInfo.length > 0 && !hasCategory) {
+    db.exec(`
+      ALTER TABLE import_payee_mapping
+      ADD COLUMN category_id TEXT REFERENCES category(id) ON DELETE SET NULL
+    `);
+    console.log('Migration: Added category_id to import_payee_mapping');
+  }
 }
 
 export function closeDatabase(): void {

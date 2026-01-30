@@ -9,6 +9,7 @@ import transactionRoutes from './routes/transactionRoutes.js';
 import transferRoutes from './routes/transferRoutes.js';
 import budgetRoutes from './routes/budgetRoutes.js';
 import payeeRoutes from './routes/payeeRoutes.js';
+import importPayeeMappingRoutes from './routes/importPayeeMappingRoutes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 const app = express();
@@ -30,6 +31,7 @@ app.use('/api/transactions', transactionRoutes);
 app.use('/api/transfers', transferRoutes);
 app.use('/api/budgets', budgetRoutes);
 app.use('/api/payees', payeeRoutes);
+app.use('/api/import-payee-mappings', importPayeeMappingRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

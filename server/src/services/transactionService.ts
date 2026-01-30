@@ -332,11 +332,12 @@ export function importTransactions(
     const now = new Date().toISOString();
 
     db.prepare(`
-      INSERT INTO "transaction" (id, account_id, date, amount, payee, memo, is_cleared, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)
+      INSERT INTO "transaction" (id, account_id, category_id, date, amount, payee, memo, is_cleared, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
     `).run(
       id,
       accountId,
+      item.categoryId ?? null,
       item.date,
       item.amount,
       item.payee ?? null,

@@ -74,6 +74,15 @@ export interface CategoryTargetRow {
   updated_at: string;
 }
 
+export interface ImportPayeeMappingRow {
+  id: string;
+  original_payee: string;
+  mapped_payee: string;
+  category_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // API response types (camelCase, with computed fields)
 export interface Account {
   id: string;
@@ -158,6 +167,15 @@ export interface CategoryTarget {
   targetAmount: number;
   targetDate: string;
   recurrenceDay: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ImportPayeeMapping {
+  id: string;
+  originalPayee: string;
+  mappedPayee: string;
+  categoryId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -257,6 +275,7 @@ export interface ImportTransactionItem {
   amount: number;
   payee?: string;
   memo?: string;
+  categoryId?: string;
 }
 
 export interface ImportTransactionsRequest {

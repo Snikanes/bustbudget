@@ -172,3 +172,23 @@ CREATE TRIGGER IF NOT EXISTS trg_category_target_updated
 BEGIN
     UPDATE category_target SET updated_at = datetime('now') WHERE id = NEW.id;
 END;
+
+-- Import payee mapping table (maps payees from import files to user-preferred names and categories)
+CREATE TABLE IF NOT EXISTS import_payee_mapping (
+    id TEXT PRIMARY KEY,
+    original_payee TEXT NOT NULL UNIQUE,
+    mapped_payee TEXT NOT NULL,
+    category_id TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (category_id) REFERENCES category(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_import_payee_mapping_original ON import_payee_mapping(original_payee);
+
+CREATE TRIGGER IF NOT EXISTS trg_import_payee_mapping_updated
+    AFTER UPDATE ON import_payee_mapping
+    FOR EACH ROW
+BEGIN
+    UPDATE import_payee_mapping SET updated_at = datetime('now') WHERE id = NEW.id;
+END;
