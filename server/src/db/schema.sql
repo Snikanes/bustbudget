@@ -149,3 +149,26 @@ CREATE TRIGGER IF NOT EXISTS trg_monthly_budget_updated
 BEGIN
     UPDATE monthly_budget SET updated_at = datetime('now') WHERE id = NEW.id;
 END;
+
+-- Category target table
+CREATE TABLE IF NOT EXISTS category_target (
+    id TEXT PRIMARY KEY,
+    category_id TEXT NOT NULL,
+    target_type TEXT NOT NULL CHECK (target_type IN ('monthly', 'yearly')),
+    target_amount INTEGER NOT NULL,
+    target_date TEXT NOT NULL,
+    recurrence_day INTEGER,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (category_id) REFERENCES category(id) ON DELETE CASCADE,
+    UNIQUE (category_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_category_target_category ON category_target(category_id);
+
+CREATE TRIGGER IF NOT EXISTS trg_category_target_updated
+    AFTER UPDATE ON category_target
+    FOR EACH ROW
+BEGIN
+    UPDATE category_target SET updated_at = datetime('now') WHERE id = NEW.id;
+END;

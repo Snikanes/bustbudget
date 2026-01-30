@@ -63,6 +63,17 @@ export interface PayeeRow {
   updated_at: string;
 }
 
+export interface CategoryTargetRow {
+  id: string;
+  category_id: string;
+  target_type: 'monthly' | 'yearly';
+  target_amount: number;
+  target_date: string;
+  recurrence_day: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // API response types (camelCase, with computed fields)
 export interface Account {
   id: string;
@@ -140,6 +151,17 @@ export interface Payee {
   updatedAt: string;
 }
 
+export interface CategoryTarget {
+  id: string;
+  categoryId: string;
+  targetType: 'monthly' | 'yearly';
+  targetAmount: number;
+  targetDate: string;
+  recurrenceDay: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // Budget calculation types
 export interface BudgetEntry {
   categoryId: string;
@@ -149,6 +171,7 @@ export interface BudgetEntry {
   assigned: number;
   activity: number;
   available: number;
+  target: CategoryTarget | null;
 }
 
 export interface BudgetMonth {
@@ -227,4 +250,18 @@ export interface CreateTransferRequest {
 
 export interface UpdateBudgetRequest {
   assigned: number;
+}
+
+export interface CreateCategoryTargetRequest {
+  targetType: 'monthly' | 'yearly';
+  targetAmount: number;
+  targetDate: string;
+  recurrenceDay?: number;
+}
+
+export interface UpdateCategoryTargetRequest {
+  targetType?: 'monthly' | 'yearly';
+  targetAmount?: number;
+  targetDate?: string;
+  recurrenceDay?: number | null;
 }

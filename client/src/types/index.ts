@@ -62,6 +62,7 @@ export interface BudgetEntry {
   assigned: number;
   activity: number;
   available: number;
+  target: CategoryTarget | null;
 }
 
 export interface BudgetMonth {
@@ -93,4 +94,15 @@ export interface Payee {
   id: string;
   name: string;
   lastCategoryId: string | null;
+}
+
+export interface CategoryTarget {
+  id: string;
+  categoryId: string;
+  targetType: 'monthly' | 'yearly';
+  targetAmount: number;
+  targetDate: string;
+  recurrenceDay: number | null;
+  createdAt: string;
+  updatedAt: string;
 }

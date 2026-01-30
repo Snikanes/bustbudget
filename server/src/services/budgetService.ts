@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { getDb } from '../db/index.js';
 import { BudgetMonth, BudgetEntry, MonthlyBudget, MonthlyBudgetRow } from '../models/types.js';
 import { NotFoundError } from '../middleware/errorHandler.js';
+import * as categoryTargetService from './categoryTargetService.js';
 
 interface CategoryBudgetRow {
   category_id: string;
@@ -75,12 +76,14 @@ export function getBudgetForMonth(month: string): BudgetMonth {
 
   // Calculate total inflows (income to budget)
   // Income = positive transactions that are NOT transfers and NOT starting balances with categories
+  // Only count UNCATEGORIZED inflows - categorized inflows (e.g., refunds) go directly to category activity
   const inflowsResult = db.prepare(`
     SELECT COALESCE(SUM(amount), 0) as total
     FROM "transaction"
     WHERE amount > 0
       AND transfer_id IS NULL
       AND is_starting_balance = 0
+      AND category_id IS NULL
       AND substr(date, 1, 7) <= ?
   `).get(month) as { total: number };
 
@@ -106,6 +109,10 @@ export function getBudgetForMonth(month: string): BudgetMonth {
   // Calculate Available to Assign
   const availableToAssign = totalInflows - totalAssigned;
 
+  // Get targets for all categories
+  const categoryIds = rows.map(r => r.category_id);
+  const targetsMap = categoryTargetService.getTargetsForCategories(categoryIds);
+
   // Group the categories
   const groupsMap = new Map<string, {
     id: string;
@@ -116,6 +123,7 @@ export function getBudgetForMonth(month: string): BudgetMonth {
   const ungroupedCategories: BudgetEntry[] = [];
 
   for (const row of rows) {
+    const target = targetsMap.get(row.category_id);
     const entry: BudgetEntry = {
       categoryId: row.category_id,
       categoryName: row.category_name,
@@ -124,6 +132,7 @@ export function getBudgetForMonth(month: string): BudgetMonth {
       assigned: row.assigned_this_month,
       activity: row.activity_this_month,
       available: row.cumulative_assigned + row.cumulative_activity,
+      target: target ?? null,
     };
 
     if (row.group_id) {
@@ -218,12 +227,14 @@ export function getAvailableToAssign(month: string): {
   const db = getDb();
 
   // Total inflows up to this month
+  // Only count UNCATEGORIZED inflows - categorized inflows (e.g., refunds) go directly to category activity
   const inflowsResult = db.prepare(`
     SELECT COALESCE(SUM(amount), 0) as total
     FROM "transaction"
     WHERE amount > 0
       AND transfer_id IS NULL
       AND is_starting_balance = 0
+      AND category_id IS NULL
       AND substr(date, 1, 7) <= ?
   `).get(month) as { total: number };
 

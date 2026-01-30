@@ -1,9 +1,11 @@
 import { useState } from 'react';
-import { X, Trash2, Edit2, FolderInput } from 'lucide-react';
+import { X, Trash2, Edit2, FolderInput, DollarSign } from 'lucide-react';
 import { useUIStore } from '@/stores/uiStore';
 import { useUpdateCategory, useDeleteCategory, useCategoryGroups } from '@/hooks/queries/useCategories';
-import { budgetKeys } from '@/hooks/queries/useBudget';
+import { budgetKeys, useUpdateBudgetEntry } from '@/hooks/queries/useBudget';
 import { useQueryClient } from '@tanstack/react-query';
+import CategoryTarget from './CategoryTarget';
+import { useCategoryTarget } from '@/hooks/queries/useCategoryTargets';
 
 function CategoryInspector() {
   const queryClient = useQueryClient();
@@ -19,6 +21,8 @@ function CategoryInspector() {
   const { data: categoryGroups } = useCategoryGroups();
   const updateCategory = useUpdateCategory();
   const deleteCategory = useDeleteCategory();
+  const updateBudgetEntry = useUpdateBudgetEntry();
+  const { data: categoryTarget } = useCategoryTarget(selectedCategory?.id || '');
 
   if (!selectedCategory) return null;
 
@@ -85,6 +89,16 @@ function CategoryInspector() {
         queryClient.invalidateQueries({ queryKey: budgetKeys.month(selectedMonth) });
       },
     });
+  };
+
+  const handleAssignTarget = () => {
+    if (categoryTarget) {
+      updateBudgetEntry.mutate({
+        month: selectedMonth,
+        categoryId: selectedCategory.id,
+        assigned: categoryTarget.targetAmount,
+      });
+    }
   };
 
   return (
@@ -222,6 +236,23 @@ function CategoryInspector() {
           </button>
         )}
       </div>
+
+      {/* Target Section */}
+      <CategoryTarget categoryId={selectedCategory.id} />
+
+      {/* Quick Assign Target Button */}
+      {categoryTarget && (
+        <div className="pt-2">
+          <button
+            onClick={handleAssignTarget}
+            disabled={updateBudgetEntry.isPending}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-700 disabled:opacity-50 transition-colors"
+          >
+            <DollarSign className="w-4 h-4" />
+            <span>Assign Target Amount</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }
