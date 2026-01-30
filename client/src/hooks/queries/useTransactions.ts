@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Transaction, Transfer } from '@/types';
+import { Transaction, Transfer, ImportTransactionItem, ImportTransactionsResponse } from '@/types';
 import { api } from '@/api/client';
 import { accountKeys } from './useAccounts';
 import { payeeKeys } from './usePayees';
@@ -114,6 +114,30 @@ export function useCreateTransfer() {
       });
       queryClient.invalidateQueries({
         queryKey: transactionKeys.byAccount(variables.toAccountId),
+      });
+      queryClient.invalidateQueries({ queryKey: accountKeys.all });
+    },
+  });
+}
+
+export function useImportTransactions() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      accountId,
+      transactions,
+    }: {
+      accountId: string;
+      transactions: ImportTransactionItem[];
+    }) =>
+      api
+        .post<ImportTransactionsResponse>(`/api/accounts/${accountId}/import`, {
+          transactions,
+        }),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: transactionKeys.byAccount(variables.accountId),
       });
       queryClient.invalidateQueries({ queryKey: accountKeys.all });
     },

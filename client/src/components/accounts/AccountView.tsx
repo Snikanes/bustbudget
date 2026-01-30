@@ -1,10 +1,14 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
+import { Upload } from 'lucide-react';
 import { useAccount, useUpdateAccount } from '@/hooks/queries/useAccounts';
 import { useTransactions } from '@/hooks/queries/useTransactions';
 import { formatNOK } from '@/utils/currency';
+import { parseQFX, ParsedTransaction } from '@/utils/qfxParser';
 import TransactionTable from './TransactionTable';
 import TextInput from '@/components/shared/TextInput';
+import FileImportModal from './FileImportModal';
+import ImportPreviewModal from './ImportPreviewModal';
 
 function AccountView() {
   const { accountId } = useParams<{ accountId: string }>();
@@ -12,6 +16,12 @@ function AccountView() {
   const { data: transactions, isLoading: transactionsLoading } = useTransactions(accountId!);
   const [isEditingName, setIsEditingName] = useState(false);
   const updateAccount = useUpdateAccount();
+
+  // Import state
+  const [showFileImport, setShowFileImport] = useState(false);
+  const [parsedTransactions, setParsedTransactions] = useState<ParsedTransaction[] | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importResult, setImportResult] = useState<{ imported: number; skipped: number } | null>(null);
 
   const handleNameChange = (newName: string) => {
     if (newName && newName !== account?.name) {
@@ -25,6 +35,30 @@ function AccountView() {
 
   const validateName = (name: string) => {
     return name.trim().length > 0 && name.trim().length <= 100;
+  };
+
+  const handleFileSelected = (content: string) => {
+    setShowFileImport(false);
+    setImportError(null);
+
+    const result = parseQFX(content);
+    if (result.error) {
+      setImportError(result.error);
+      return;
+    }
+
+    setParsedTransactions(result.transactions);
+  };
+
+  const handleImportComplete = (imported: number, skipped: number) => {
+    setParsedTransactions(null);
+    setImportResult({ imported, skipped });
+    // Auto-dismiss after 5 seconds
+    setTimeout(() => setImportResult(null), 5000);
+  };
+
+  const handleCloseImportPreview = () => {
+    setParsedTransactions(null);
   };
 
   if (accountLoading || transactionsLoading) {
@@ -51,24 +85,33 @@ function AccountView() {
       {/* Header */}
       <header className="px-6 py-4 border-b border-gray-200 bg-white">
         <div className="flex items-center justify-between">
-          {isEditingName ? (
-            <TextInput
-              value={account.name}
-              onChange={handleNameChange}
-              onCancel={() => setIsEditingName(false)}
-              validate={validateName}
-              autoFocus
-              selectAllOnFocus
-              className="text-xl font-semibold"
-            />
-          ) : (
-            <h1
-              onClick={() => setIsEditingName(true)}
-              className="text-xl font-semibold cursor-pointer hover:bg-gray-100 px-2 -mx-2 rounded transition-colors"
+          <div className="flex items-center gap-4">
+            {isEditingName ? (
+              <TextInput
+                value={account.name}
+                onChange={handleNameChange}
+                onCancel={() => setIsEditingName(false)}
+                validate={validateName}
+                autoFocus
+                selectAllOnFocus
+                className="text-xl font-semibold"
+              />
+            ) : (
+              <h1
+                onClick={() => setIsEditingName(true)}
+                className="text-xl font-semibold cursor-pointer hover:bg-gray-100 px-2 -mx-2 rounded transition-colors"
+              >
+                {account.name}
+              </h1>
+            )}
+            <button
+              onClick={() => setShowFileImport(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
             >
-              {account.name}
-            </h1>
-          )}
+              <Upload className="w-4 h-4" />
+              Import
+            </button>
+          </div>
           <div className="text-right">
             <div className="text-sm text-gray-500">Balance</div>
             <div className={`text-xl font-semibold ${
@@ -82,6 +125,27 @@ function AccountView() {
           <span>Cleared: {formatNOK(account.clearedBalance)}</span>
           <span>Uncleared: {formatNOK(account.unclearedBalance)}</span>
         </div>
+
+        {/* Import result notification */}
+        {importResult && (
+          <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-800">
+            Successfully imported {importResult.imported} transaction{importResult.imported !== 1 ? 's' : ''}.
+            {importResult.skipped > 0 && ` ${importResult.skipped} duplicate${importResult.skipped !== 1 ? 's' : ''} skipped.`}
+          </div>
+        )}
+
+        {/* Import error notification */}
+        {importError && (
+          <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800 flex items-center justify-between">
+            <span>{importError}</span>
+            <button
+              onClick={() => setImportError(null)}
+              className="text-red-600 hover:text-red-800"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
       </header>
 
       {/* Transactions */}
@@ -91,6 +155,26 @@ function AccountView() {
           transactions={transactions || []}
         />
       </div>
+
+      {/* File Import Modal */}
+      {showFileImport && (
+        <FileImportModal
+          onClose={() => setShowFileImport(false)}
+          onFileSelected={handleFileSelected}
+        />
+      )}
+
+      {/* Import Preview Modal */}
+      {parsedTransactions && (
+        <ImportPreviewModal
+          accountId={accountId!}
+          accountName={account.name}
+          transactions={parsedTransactions}
+          existingTransactions={transactions || []}
+          onClose={handleCloseImportPreview}
+          onImportComplete={handleImportComplete}
+        />
+      )}
     </div>
   );
 }

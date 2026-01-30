@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import * as accountService from '../services/accountService.js';
 import * as transactionService from '../services/transactionService.js';
-import { CreateAccountRequest, UpdateAccountRequest, CreateTransactionRequest } from '../models/types.js';
+import { CreateAccountRequest, UpdateAccountRequest, CreateTransactionRequest, ImportTransactionsRequest } from '../models/types.js';
 
 const router = Router();
 
@@ -67,6 +67,13 @@ router.post('/:id/starting-balance', asyncHandler(async (req, res) => {
   const { amount, date } = req.body as { amount: number; date: string };
   const transaction = transactionService.createStartingBalance(req.params.id, amount, date);
   res.status(201).json({ transaction });
+}));
+
+// POST /api/accounts/:id/import
+router.post('/:id/import', asyncHandler(async (req, res) => {
+  const data: ImportTransactionsRequest = req.body;
+  const result = transactionService.importTransactions(req.params.id, data.transactions);
+  res.status(201).json(result);
 }));
 
 export default router;

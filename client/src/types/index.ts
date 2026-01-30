@@ -106,3 +106,16 @@ export interface CategoryTarget {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface ImportTransactionItem {
+  date: string;
+  amount: number;
+  payee?: string;
+  memo?: string;
+}
+
+export interface ImportTransactionsResponse {
+  imported: number;
+  skipped: number;
+  transactions: Transaction[];
+}

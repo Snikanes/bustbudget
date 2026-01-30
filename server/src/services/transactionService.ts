@@ -5,6 +5,8 @@ import {
   Transaction,
   CreateTransactionRequest,
   UpdateTransactionRequest,
+  ImportTransactionItem,
+  ImportTransactionsResponse,
 } from '../models/types.js';
 import { NotFoundError, ValidationError, BusinessRuleError } from '../middleware/errorHandler.js';
 import { upsertPayee } from './payeeService.js';
@@ -285,4 +287,70 @@ export function createStartingBalance(accountId: string, amount: number, date: s
   `).run(id, accountId, date, amount, now, now);
 
   return getTransactionById(id);
+}
+
+export function importTransactions(
+  accountId: string,
+  items: ImportTransactionItem[]
+): ImportTransactionsResponse {
+  const db = getDb();
+
+  // Validate account exists
+  const account = db.prepare('SELECT id FROM account WHERE id = ?').get(accountId);
+  if (!account) {
+    throw new NotFoundError('Account', accountId);
+  }
+
+  const importedTransactions: Transaction[] = [];
+  let skipped = 0;
+
+  // Get today's date for validation
+  const today = new Date().toISOString().split('T')[0];
+
+  for (const item of items) {
+    // Skip future-dated transactions
+    if (item.date > today) {
+      skipped++;
+      continue;
+    }
+
+    // Check for duplicate: same date + amount (payee doesn't need to match - user may have entered manually with different name)
+    const duplicate = db.prepare(`
+      SELECT id FROM "transaction"
+      WHERE account_id = ?
+        AND date = ?
+        AND amount = ?
+    `).get(accountId, item.date, item.amount);
+
+    if (duplicate) {
+      skipped++;
+      continue;
+    }
+
+    // Create the transaction
+    const id = uuidv4();
+    const now = new Date().toISOString();
+
+    db.prepare(`
+      INSERT INTO "transaction" (id, account_id, date, amount, payee, memo, is_cleared, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)
+    `).run(
+      id,
+      accountId,
+      item.date,
+      item.amount,
+      item.payee ?? null,
+      item.memo ?? null,
+      now,
+      now
+    );
+
+    importedTransactions.push(getTransactionById(id));
+  }
+
+  return {
+    imported: importedTransactions.length,
+    skipped,
+    transactions: importedTransactions,
+  };
 }

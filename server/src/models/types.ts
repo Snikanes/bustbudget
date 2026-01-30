@@ -252,6 +252,23 @@ export interface UpdateBudgetRequest {
   assigned: number;
 }
 
+export interface ImportTransactionItem {
+  date: string;
+  amount: number;
+  payee?: string;
+  memo?: string;
+}
+
+export interface ImportTransactionsRequest {
+  transactions: ImportTransactionItem[];
+}
+
+export interface ImportTransactionsResponse {
+  imported: number;
+  skipped: number;
+  transactions: Transaction[];
+}
+
 export interface CreateCategoryTargetRequest {
   targetType: 'monthly' | 'yearly' | 'by_date';
   targetAmount: number;
