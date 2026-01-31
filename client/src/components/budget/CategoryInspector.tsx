@@ -6,6 +6,7 @@ import { budgetKeys, useUpdateBudgetEntry, useBudget } from '@/hooks/queries/use
 import { useQueryClient } from '@tanstack/react-query';
 import CategoryTarget from './CategoryTarget';
 import { useCategoryTarget } from '@/hooks/queries/useCategoryTargets';
+import { calculateTargetAssignment } from './calculateTargetAssignment';
 
 function CategoryInspector() {
   const queryClient = useQueryClient();
@@ -94,42 +95,38 @@ function CategoryInspector() {
 
   const handleAssignTarget = () => {
     if (categoryTarget && budgetData) {
-      let assignedAmount = categoryTarget.targetAmount;
+      // Find current category's assigned and available amounts
+      let currentAssigned = 0;
+      let currentAvailable = 0;
 
-      // For by_date targets, calculate monthly amount based on months remaining
-      if (categoryTarget.targetType === 'by_date') {
-        const currentDate = new Date(selectedMonth + '-01');
-        const targetDate = new Date(categoryTarget.targetDate);
-
-        // Calculate months remaining (including current month)
-        const monthsRemaining =
-          (targetDate.getFullYear() - currentDate.getFullYear()) * 12 +
-          (targetDate.getMonth() - currentDate.getMonth()) + 1;
-
-        if (monthsRemaining > 0) {
-          // Find current category's available amount
-          let currentAvailable = 0;
-          for (const group of budgetData.groups) {
-            const category = group.categories.find(c => c.categoryId === selectedCategory.id);
-            if (category) {
-              currentAvailable = category.available;
-              break;
-            }
-          }
-          if (currentAvailable === 0) {
-            const ungroupedCategory = budgetData.ungroupedCategories.find(
-              c => c.categoryId === selectedCategory.id
-            );
-            if (ungroupedCategory) {
-              currentAvailable = ungroupedCategory.available;
-            }
-          }
-
-          // Calculate remaining amount needed
-          const remainingNeeded = Math.max(0, categoryTarget.targetAmount - currentAvailable);
-          assignedAmount = Math.round(remainingNeeded / monthsRemaining);
+      for (const group of budgetData.groups) {
+        const category = group.categories.find(c => c.categoryId === selectedCategory.id);
+        if (category) {
+          currentAssigned = category.assigned;
+          currentAvailable = category.available;
+          break;
         }
       }
+
+      if (currentAssigned === 0 && currentAvailable === 0) {
+        const ungroupedCategory = budgetData.ungroupedCategories.find(
+          c => c.categoryId === selectedCategory.id
+        );
+        if (ungroupedCategory) {
+          currentAssigned = ungroupedCategory.assigned;
+          currentAvailable = ungroupedCategory.available;
+        }
+      }
+
+      // Calculate the amount to assign using the shared calculation logic
+      const assignedAmount = calculateTargetAssignment({
+        targetType: categoryTarget.targetType,
+        targetAmount: categoryTarget.targetAmount,
+        targetDate: categoryTarget.targetDate,
+        currentMonth: selectedMonth,
+        currentAssigned,
+        currentAvailable,
+      });
 
       updateBudgetEntry.mutate({
         month: selectedMonth,
