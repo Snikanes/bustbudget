@@ -218,13 +218,36 @@ export function TargetProgressText({
     // Calculate monthly amount needed (remaining / months remaining)
     // Use available instead of assigned to account for existing progress
     const actualRemaining = target.targetAmount - available;
-    const monthlyAmount = Math.ceil(actualRemaining / monthsRemaining);
+    const monthlyTarget = Math.ceil(actualRemaining / monthsRemaining);
 
-    return (
-      <span className="text-yellow-600 text-sm">
-        {formatAmount(monthlyAmount)} needed this month
-      </span>
-    );
+    // Calculate how much more is needed this month after what's been assigned
+    // If assigned is negative, treat it as 0 (negative means money moved out)
+    const effectiveAssigned = Math.max(0, assigned);
+    const moreNeededThisMonth = Math.max(0, monthlyTarget - effectiveAssigned);
+
+    // If already assigned enough this month, show as on track
+    if (moreNeededThisMonth === 0) {
+      return (
+        <span className="text-green-600 text-sm font-medium">
+          On track
+        </span>
+      );
+    }
+
+    // Show different text based on whether anything has been assigned yet
+    if (effectiveAssigned > 0) {
+      return (
+        <span className="text-yellow-600 text-sm">
+          {formatAmount(moreNeededThisMonth)} more needed this month
+        </span>
+      );
+    } else {
+      return (
+        <span className="text-yellow-600 text-sm">
+          {formatAmount(moreNeededThisMonth)} needed this month
+        </span>
+      );
+    }
   }
 
   // Recurring targets (monthly/yearly)

@@ -277,12 +277,11 @@ describe('TargetProgressText', () => {
   });
 
   describe('By Date Underfunded', () => {
-    it('should display "X needed this month" showing monthly amount for by_date target', () => {
+    it('should display "X needed this month" when nothing assigned yet', () => {
       // Target: 2095.00 kr by March 15th
       // Current: January (3 months remaining: Jan, Feb, Mar)
-      // Available: 0 kr
-      // Remaining: 2095.00 kr
-      // Monthly needed: 2095.00 / 3 = 698.34 kr (rounded up)
+      // Available: 0 kr, Assigned: 0 kr
+      // Monthly target: 2095.00 / 3 = 698.34 kr (rounded up)
       const target = createMockTarget({
         targetType: 'by_date',
         targetAmount: 209500, // 2095.00 kr
@@ -300,9 +299,67 @@ describe('TargetProgressText', () => {
         />
       );
 
-      // Should show monthly amount, not total
-      // 209500 / 3 = 69833.33... → rounds up to 69834 cents = 698.34 kr
+      // Should show full monthly amount without "more"
       expect(screen.getByText(/698,34 needed this month/)).toBeInTheDocument();
+      expect(screen.queryByText(/more needed/)).not.toBeInTheDocument();
+    });
+
+    it('should display "X more needed this month" when partially assigned', () => {
+      // Target: 2095.00 kr by March (3 months away)
+      // Available: 1047.50 kr from previous months
+      // Remaining: 1047.50 kr
+      // Monthly target: 1047.50 / 3 = 349.17 kr (rounded up to 349.17)
+      // Actually wait, let's use 2 months for cleaner math
+      // Monthly target: 1047.50 / 2 = 523.75 kr
+      // Assigned this month: 200 kr
+      // More needed: 523.75 - 200 = 323.75 kr
+      const target = createMockTarget({
+        targetType: 'by_date',
+        targetAmount: 209500, // 2095.00 kr
+        targetDate: '2026-03-15',
+        createdAt: '2025-12-01T00:00:00Z',
+      });
+
+      render(
+        <TargetProgressText
+          target={target}
+          assigned={20000} // 200 kr assigned this month
+          activity={0}
+          available={104750} // 1047.50 kr already saved
+          currentMonth="2026-02" // February, 2 months remaining
+        />
+      );
+
+      // Monthly target: (209500 - 104750) / 2 = 52375 cents = 523.75 kr
+      // More needed: 523.75 - 200 = 323.75 kr
+      expect(screen.getByText(/323,75 more needed this month/)).toBeInTheDocument();
+    });
+
+    it('should display "On track" when monthly target is met', () => {
+      // Target: 1500 kr by March (2 months away)
+      // Available: 750 kr
+      // Remaining: 750 kr
+      // Monthly target: 750 / 2 = 375 kr
+      // Assigned this month: 375 kr
+      // More needed: 0 kr → On track
+      const target = createMockTarget({
+        targetType: 'by_date',
+        targetAmount: 150000,
+        targetDate: '2026-03-30',
+        createdAt: '2026-01-01T00:00:00Z',
+      });
+
+      render(
+        <TargetProgressText
+          target={target}
+          assigned={37500} // 375 kr assigned this month
+          activity={0}
+          available={75000} // 750 kr total
+          currentMonth="2026-02"
+        />
+      );
+
+      expect(screen.getByText('On track')).toBeInTheDocument();
     });
 
     it('should calculate monthly amount correctly for by_date target with 1 month remaining', () => {
