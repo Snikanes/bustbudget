@@ -183,8 +183,15 @@ export function TargetProgressText({
           Fully Spent
         </span>
       );
+    } else if (spentAmount === 0) {
+      // Funded but nothing spent yet
+      return (
+        <span className="text-green-600 text-sm font-medium bg-green-100 px-2 py-0.5 rounded">
+          Funded
+        </span>
+      );
     } else {
-      // Funded but not fully spent
+      // Funded and partially spent
       return (
         <span className="text-green-600 text-sm">
           Funded. Spent {formatAmount(spentAmount)} of {formatAmount(target.targetAmount)}
