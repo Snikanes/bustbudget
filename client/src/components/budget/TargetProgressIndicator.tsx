@@ -18,9 +18,10 @@ function TargetProgressIndicator({
   const spentAmount = Math.abs(activity);
   const isFunded = assigned >= target.targetAmount;
   const isOverspent = spentAmount > assigned;
+  const isUnderfunded = assigned < target.targetAmount;
 
   // Calculate progress percentage based on assigned amount
-  const progress = Math.min(100, Math.max(0, (assigned / target.targetAmount) * 100));
+  const assignedProgress = Math.min(100, Math.max(0, (assigned / target.targetAmount) * 100));
 
   // Check if on track for by_date targets
   const isOnTrack = () => {
@@ -56,6 +57,32 @@ function TargetProgressIndicator({
     return available >= expectedProgress;
   };
 
+  // Special case: Underfunded AND overspent
+  // Show two-part bar: yellow for assigned, red striped for overspent
+  if (isUnderfunded && isOverspent) {
+    const overspentAmount = spentAmount - assigned;
+    const overspentProgress = Math.min(
+      100 - assignedProgress, // Cap so total doesn't exceed 100%
+      (overspentAmount / target.targetAmount) * 100
+    );
+
+    return (
+      <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden flex">
+        {/* Assigned portion (yellow) */}
+        <div
+          className="h-full bg-yellow-500 transition-all duration-300"
+          style={{ width: `${assignedProgress}%` }}
+        />
+        {/* Overspent portion (red with stripes) */}
+        <div
+          className="h-full bg-red-500 bg-stripe-red transition-all duration-300"
+          style={{ width: `${overspentProgress}%` }}
+        />
+      </div>
+    );
+  }
+
+  // Standard single-bar display for all other cases
   // Determine progress bar color
   const getBarColor = () => {
     if (isOverspent) {
@@ -75,7 +102,7 @@ function TargetProgressIndicator({
     <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
       <div
         className={`h-full ${getBarColor()} transition-all duration-300`}
-        style={{ width: `${progress}%` }}
+        style={{ width: `${assignedProgress}%` }}
       />
     </div>
   );
