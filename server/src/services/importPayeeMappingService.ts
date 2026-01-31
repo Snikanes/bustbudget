@@ -27,56 +27,56 @@ const SELECT_WITH_PAYEE = `
   JOIN payee p ON ipm.payee_id = p.id
 `;
 
-export function getAllMappings(): ImportPayeeMapping[] {
+export function getAllMappings(userId: string): ImportPayeeMapping[] {
   const db = getDb();
-  const rows = db.prepare(`${SELECT_WITH_PAYEE} ORDER BY ipm.original_payee`).all() as ImportPayeeMappingWithPayeeRow[];
+  const rows = db.prepare(`${SELECT_WITH_PAYEE} WHERE ipm.user_id = ? ORDER BY ipm.original_payee`).all(userId) as ImportPayeeMappingWithPayeeRow[];
   return rows.map(rowToMapping);
 }
 
-export function getMappingByOriginalPayee(originalPayee: string): ImportPayeeMapping | null {
+export function getMappingByOriginalPayee(userId: string, originalPayee: string): ImportPayeeMapping | null {
   const db = getDb();
-  const row = db.prepare(`${SELECT_WITH_PAYEE} WHERE ipm.original_payee = ?`).get(originalPayee) as ImportPayeeMappingWithPayeeRow | undefined;
+  const row = db.prepare(`${SELECT_WITH_PAYEE} WHERE ipm.user_id = ? AND ipm.original_payee = ?`).get(userId, originalPayee) as ImportPayeeMappingWithPayeeRow | undefined;
   return row ? rowToMapping(row) : null;
 }
 
-export function upsertMapping(originalPayee: string, payeeId: string): ImportPayeeMapping {
+export function upsertMapping(userId: string, originalPayee: string, payeeId: string): ImportPayeeMapping {
   const db = getDb();
 
   // Check if mapping already exists
-  const existing = db.prepare('SELECT id FROM import_payee_mapping WHERE original_payee = ?').get(originalPayee) as { id: string } | undefined;
+  const existing = db.prepare('SELECT id FROM import_payee_mapping WHERE user_id = ? AND original_payee = ?').get(userId, originalPayee) as { id: string } | undefined;
 
   if (existing) {
     // Update existing mapping
-    db.prepare('UPDATE import_payee_mapping SET payee_id = ? WHERE id = ?').run(payeeId, existing.id);
-    const updated = db.prepare(`${SELECT_WITH_PAYEE} WHERE ipm.id = ?`).get(existing.id) as ImportPayeeMappingWithPayeeRow;
+    db.prepare('UPDATE import_payee_mapping SET payee_id = ? WHERE user_id = ? AND id = ?').run(payeeId, userId, existing.id);
+    const updated = db.prepare(`${SELECT_WITH_PAYEE} WHERE ipm.user_id = ? AND ipm.id = ?`).get(userId, existing.id) as ImportPayeeMappingWithPayeeRow;
     return rowToMapping(updated);
   } else {
     // Create new mapping
     const id = uuidv4();
     const now = new Date().toISOString();
     db.prepare(`
-      INSERT INTO import_payee_mapping (id, original_payee, payee_id, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(id, originalPayee, payeeId, now, now);
+      INSERT INTO import_payee_mapping (id, user_id, original_payee, payee_id, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(id, userId, originalPayee, payeeId, now, now);
 
-    const created = db.prepare(`${SELECT_WITH_PAYEE} WHERE ipm.id = ?`).get(id) as ImportPayeeMappingWithPayeeRow;
+    const created = db.prepare(`${SELECT_WITH_PAYEE} WHERE ipm.user_id = ? AND ipm.id = ?`).get(userId, id) as ImportPayeeMappingWithPayeeRow;
     return rowToMapping(created);
   }
 }
 
-export function deleteMapping(id: string): void {
+export function deleteMapping(userId: string, id: string): void {
   const db = getDb();
-  db.prepare('DELETE FROM import_payee_mapping WHERE id = ?').run(id);
+  db.prepare('DELETE FROM import_payee_mapping WHERE user_id = ? AND id = ?').run(userId, id);
 }
 
-export function getMappingsByPayeeId(payeeId: string): { id: string; originalPayee: string }[] {
+export function getMappingsByPayeeId(userId: string, payeeId: string): { id: string; originalPayee: string }[] {
   const db = getDb();
   const rows = db.prepare(`
     SELECT id, original_payee
     FROM import_payee_mapping
-    WHERE payee_id = ?
+    WHERE user_id = ? AND payee_id = ?
     ORDER BY original_payee
-  `).all(payeeId) as { id: string; original_payee: string }[];
+  `).all(userId, payeeId) as { id: string; original_payee: string }[];
 
   return rows.map(row => ({
     id: row.id,

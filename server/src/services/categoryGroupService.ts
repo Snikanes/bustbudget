@@ -32,40 +32,40 @@ function rowToCategoryGroup(row: CategoryGroupRow, categories: Category[]): Cate
   };
 }
 
-export function getAllCategoryGroups(): CategoryGroup[] {
+export function getAllCategoryGroups(userId: string): CategoryGroup[] {
   const db = getDb();
 
   const groupRows = db.prepare(`
-    SELECT * FROM category_group ORDER BY sort_order, name
-  `).all() as CategoryGroupRow[];
+    SELECT * FROM category_group WHERE user_id = ? ORDER BY sort_order, name
+  `).all(userId) as CategoryGroupRow[];
 
   const categoryRows = db.prepare(`
-    SELECT * FROM category ORDER BY sort_order, name
-  `).all() as CategoryRow[];
+    SELECT * FROM category WHERE user_id = ? ORDER BY sort_order, name
+  `).all(userId) as CategoryRow[];
 
   const categories = categoryRows.map(categoryRowToCategory);
 
   return groupRows.map(row => rowToCategoryGroup(row, categories));
 }
 
-export function getCategoryGroupById(id: string): CategoryGroup {
+export function getCategoryGroupById(userId: string, id: string): CategoryGroup {
   const db = getDb();
 
-  const row = db.prepare('SELECT * FROM category_group WHERE id = ?').get(id) as CategoryGroupRow | undefined;
+  const row = db.prepare('SELECT * FROM category_group WHERE user_id = ? AND id = ?').get(userId, id) as CategoryGroupRow | undefined;
   if (!row) {
     throw new NotFoundError('CategoryGroup', id);
   }
 
   const categoryRows = db.prepare(`
-    SELECT * FROM category WHERE group_id = ? ORDER BY sort_order, name
-  `).all(id) as CategoryRow[];
+    SELECT * FROM category WHERE user_id = ? AND group_id = ? ORDER BY sort_order, name
+  `).all(userId, id) as CategoryRow[];
 
   const categories = categoryRows.map(categoryRowToCategory);
 
   return rowToCategoryGroup(row, categories);
 }
 
-export function createCategoryGroup(data: CreateCategoryGroupRequest): CategoryGroup {
+export function createCategoryGroup(userId: string, data: CreateCategoryGroupRequest): CategoryGroup {
   const db = getDb();
   const id = uuidv4();
   const now = new Date().toISOString();
@@ -73,23 +73,23 @@ export function createCategoryGroup(data: CreateCategoryGroupRequest): CategoryG
   // Get max sort order if not provided
   let sortOrder = data.sortOrder;
   if (sortOrder === undefined) {
-    const max = db.prepare('SELECT MAX(sort_order) as max FROM category_group').get() as { max: number | null };
+    const max = db.prepare('SELECT MAX(sort_order) as max FROM category_group WHERE user_id = ?').get(userId) as { max: number | null };
     sortOrder = (max.max ?? -1) + 1;
   }
 
   db.prepare(`
-    INSERT INTO category_group (id, name, sort_order, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(id, data.name, sortOrder, now, now);
+    INSERT INTO category_group (id, user_id, name, sort_order, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(id, userId, data.name, sortOrder, now, now);
 
-  return getCategoryGroupById(id);
+  return getCategoryGroupById(userId, id);
 }
 
-export function updateCategoryGroup(id: string, data: UpdateCategoryGroupRequest): CategoryGroup {
+export function updateCategoryGroup(userId: string, id: string, data: UpdateCategoryGroupRequest): CategoryGroup {
   const db = getDb();
 
-  // Check exists
-  const existing = db.prepare('SELECT id FROM category_group WHERE id = ?').get(id);
+  // Check exists and belongs to user
+  const existing = db.prepare('SELECT id FROM category_group WHERE user_id = ? AND id = ?').get(userId, id);
   if (!existing) {
     throw new NotFoundError('CategoryGroup', id);
   }
@@ -108,41 +108,41 @@ export function updateCategoryGroup(id: string, data: UpdateCategoryGroupRequest
   }
 
   if (updates.length > 0) {
-    params.push(id);
-    db.prepare(`UPDATE category_group SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+    params.push(userId, id);
+    db.prepare(`UPDATE category_group SET ${updates.join(', ')} WHERE user_id = ? AND id = ?`).run(...params);
   }
 
-  return getCategoryGroupById(id);
+  return getCategoryGroupById(userId, id);
 }
 
-export function deleteCategoryGroup(id: string): { movedCategories: string[] } {
+export function deleteCategoryGroup(userId: string, id: string): { movedCategories: string[] } {
   const db = getDb();
 
-  // Check exists
-  const existing = db.prepare('SELECT id FROM category_group WHERE id = ?').get(id);
+  // Check exists and belongs to user
+  const existing = db.prepare('SELECT id FROM category_group WHERE user_id = ? AND id = ?').get(userId, id);
   if (!existing) {
     throw new NotFoundError('CategoryGroup', id);
   }
 
   // Get categories that will be moved
-  const categories = db.prepare('SELECT id FROM category WHERE group_id = ?').all(id) as { id: string }[];
+  const categories = db.prepare('SELECT id FROM category WHERE user_id = ? AND group_id = ?').all(userId, id) as { id: string }[];
   const movedCategoryIds = categories.map(c => c.id);
 
   // Move categories to top-level (null group_id)
-  db.prepare('UPDATE category SET group_id = NULL WHERE group_id = ?').run(id);
+  db.prepare('UPDATE category SET group_id = NULL WHERE user_id = ? AND group_id = ?').run(userId, id);
 
   // Delete the group
-  db.prepare('DELETE FROM category_group WHERE id = ?').run(id);
+  db.prepare('DELETE FROM category_group WHERE user_id = ? AND id = ?').run(userId, id);
 
   return { movedCategories: movedCategoryIds };
 }
 
-export function reorderCategoryGroups(orderedIds: string[]): void {
+export function reorderCategoryGroups(userId: string, orderedIds: string[]): void {
   const db = getDb();
 
-  const stmt = db.prepare('UPDATE category_group SET sort_order = ? WHERE id = ?');
+  const stmt = db.prepare('UPDATE category_group SET sort_order = ? WHERE user_id = ? AND id = ?');
 
   orderedIds.forEach((id, index) => {
-    stmt.run(index, id);
+    stmt.run(index, userId, id);
   });
 }

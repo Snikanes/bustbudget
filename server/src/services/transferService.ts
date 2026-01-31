@@ -3,20 +3,20 @@ import { getDb } from '../db/index.js';
 import { Transfer, CreateTransferRequest } from '../models/types.js';
 import { NotFoundError, ValidationError, BusinessRuleError } from '../middleware/errorHandler.js';
 
-export function createTransfer(data: CreateTransferRequest): Transfer {
+export function createTransfer(userId: string, data: CreateTransferRequest): Transfer {
   const db = getDb();
 
-  // Validate accounts exist and are different
+  // Validate accounts exist, belong to user, and are different
   if (data.fromAccountId === data.toAccountId) {
     throw new ValidationError('Transfer must be between different accounts');
   }
 
-  const fromAccount = db.prepare('SELECT id, name FROM account WHERE id = ?').get(data.fromAccountId) as { id: string; name: string } | undefined;
+  const fromAccount = db.prepare('SELECT id, name FROM account WHERE user_id = ? AND id = ?').get(userId, data.fromAccountId) as { id: string; name: string } | undefined;
   if (!fromAccount) {
     throw new NotFoundError('Account', data.fromAccountId);
   }
 
-  const toAccount = db.prepare('SELECT id, name FROM account WHERE id = ?').get(data.toAccountId) as { id: string; name: string } | undefined;
+  const toAccount = db.prepare('SELECT id, name FROM account WHERE user_id = ? AND id = ?').get(userId, data.toAccountId) as { id: string; name: string } | undefined;
   if (!toAccount) {
     throw new NotFoundError('Account', data.toAccountId);
   }
@@ -44,10 +44,11 @@ export function createTransfer(data: CreateTransferRequest): Transfer {
   const insertTransfer = db.transaction(() => {
     // Step 1: Create transactions WITHOUT transfer_id
     db.prepare(`
-      INSERT INTO "transaction" (id, account_id, date, amount, payee, memo, is_cleared, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO "transaction" (id, user_id, account_id, date, amount, payee, memo, is_cleared, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       fromTxnId,
+      userId,
       data.fromAccountId,
       data.date,
       -data.amount,
@@ -59,10 +60,11 @@ export function createTransfer(data: CreateTransferRequest): Transfer {
     );
 
     db.prepare(`
-      INSERT INTO "transaction" (id, account_id, date, amount, payee, memo, is_cleared, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO "transaction" (id, user_id, account_id, date, amount, payee, memo, is_cleared, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       toTxnId,
+      userId,
       data.toAccountId,
       data.date,
       data.amount,
@@ -75,13 +77,13 @@ export function createTransfer(data: CreateTransferRequest): Transfer {
 
     // Step 2: Create transfer record
     db.prepare(`
-      INSERT INTO transfer (id, from_txn_id, to_txn_id, created_at)
-      VALUES (?, ?, ?, ?)
-    `).run(transferId, fromTxnId, toTxnId, now);
+      INSERT INTO transfer (id, user_id, from_txn_id, to_txn_id, created_at)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(transferId, userId, fromTxnId, toTxnId, now);
 
     // Step 3: Update transactions with transfer_id
-    db.prepare('UPDATE "transaction" SET transfer_id = ? WHERE id = ?').run(transferId, fromTxnId);
-    db.prepare('UPDATE "transaction" SET transfer_id = ? WHERE id = ?').run(transferId, toTxnId);
+    db.prepare('UPDATE "transaction" SET transfer_id = ? WHERE user_id = ? AND id = ?').run(transferId, userId, fromTxnId);
+    db.prepare('UPDATE "transaction" SET transfer_id = ? WHERE user_id = ? AND id = ?').run(transferId, userId, toTxnId);
   });
 
   insertTransfer();
@@ -99,7 +101,7 @@ export function createTransfer(data: CreateTransferRequest): Transfer {
   };
 }
 
-export function getTransferById(id: string): Transfer {
+export function getTransferById(userId: string, id: string): Transfer {
   const db = getDb();
 
   const transfer = db.prepare(`
@@ -116,8 +118,8 @@ export function getTransferById(id: string): Transfer {
     FROM transfer tr
     JOIN "transaction" from_t ON from_t.id = tr.from_txn_id
     JOIN "transaction" to_t ON to_t.id = tr.to_txn_id
-    WHERE tr.id = ?
-  `).get(id) as {
+    WHERE tr.user_id = ? AND tr.id = ?
+  `).get(userId, id) as {
     id: string;
     from_txn_id: string;
     to_txn_id: string;
@@ -147,16 +149,17 @@ export function getTransferById(id: string): Transfer {
 }
 
 export function updateTransfer(
+  userId: string,
   id: string,
   data: { date?: string; amount?: number; memo?: string; isCleared?: boolean }
 ): Transfer {
   const db = getDb();
 
   // Get existing transfer
-  const existing = getTransferById(id);
+  const existing = getTransferById(userId, id);
 
   // Get the transactions
-  const fromTxn = db.prepare('SELECT * FROM "transaction" WHERE id = ?').get(existing.fromTransactionId) as { is_cleared: number } | undefined;
+  const fromTxn = db.prepare('SELECT * FROM "transaction" WHERE user_id = ? AND id = ?').get(userId, existing.fromTransactionId) as { is_cleared: number } | undefined;
 
   if (!fromTxn) {
     throw new NotFoundError('Transaction', existing.fromTransactionId);
@@ -199,31 +202,31 @@ export function updateTransfer(
   }
 
   if (updates.length > 0) {
-    const stmt = db.prepare(`UPDATE "transaction" SET ${updates.join(', ')} WHERE id = ?`);
-    stmt.run(...params, existing.fromTransactionId);
-    stmt.run(...params, existing.toTransactionId);
+    const stmt = db.prepare(`UPDATE "transaction" SET ${updates.join(', ')} WHERE user_id = ? AND id = ?`);
+    stmt.run(...params, userId, existing.fromTransactionId);
+    stmt.run(...params, userId, existing.toTransactionId);
   }
 
   // Update amounts separately (need to negate for from transaction)
   if (data.amount !== undefined) {
-    db.prepare('UPDATE "transaction" SET amount = ? WHERE id = ?').run(-data.amount, existing.fromTransactionId);
-    db.prepare('UPDATE "transaction" SET amount = ? WHERE id = ?').run(data.amount, existing.toTransactionId);
+    db.prepare('UPDATE "transaction" SET amount = ? WHERE user_id = ? AND id = ?').run(-data.amount, userId, existing.fromTransactionId);
+    db.prepare('UPDATE "transaction" SET amount = ? WHERE user_id = ? AND id = ?').run(data.amount, userId, existing.toTransactionId);
   }
 
-  return getTransferById(id);
+  return getTransferById(userId, id);
 }
 
-export function deleteTransfer(id: string): void {
+export function deleteTransfer(userId: string, id: string): void {
   const db = getDb();
 
-  const existing = db.prepare('SELECT from_txn_id, to_txn_id FROM transfer WHERE id = ?').get(id) as { from_txn_id: string; to_txn_id: string } | undefined;
+  const existing = db.prepare('SELECT from_txn_id, to_txn_id FROM transfer WHERE user_id = ? AND id = ?').get(userId, id) as { from_txn_id: string; to_txn_id: string } | undefined;
 
   if (!existing) {
     throw new NotFoundError('Transfer', id);
   }
 
   // Delete transactions and transfer
-  db.prepare('DELETE FROM "transaction" WHERE id = ?').run(existing.from_txn_id);
-  db.prepare('DELETE FROM "transaction" WHERE id = ?').run(existing.to_txn_id);
-  db.prepare('DELETE FROM transfer WHERE id = ?').run(id);
+  db.prepare('DELETE FROM "transaction" WHERE user_id = ? AND id = ?').run(userId, existing.from_txn_id);
+  db.prepare('DELETE FROM "transaction" WHERE user_id = ? AND id = ?').run(userId, existing.to_txn_id);
+  db.prepare('DELETE FROM transfer WHERE user_id = ? AND id = ?').run(userId, id);
 }

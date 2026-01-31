@@ -55,23 +55,23 @@ const BASE_QUERY = `
   LEFT JOIN account other_a ON other_a.id = other_t.account_id
 `;
 
-export function getTransactionsByAccount(accountId: string): Transaction[] {
+export function getTransactionsByAccount(userId: string, accountId: string): Transaction[] {
   const db = getDb();
   const rows = db.prepare(`
     ${BASE_QUERY}
-    WHERE t.account_id = ?
+    WHERE t.user_id = ? AND t.account_id = ?
     ORDER BY t.date DESC, t.created_at DESC
-  `).all(accountId) as TransactionWithJoins[];
+  `).all(userId, accountId) as TransactionWithJoins[];
 
   return rows.map(rowToTransaction);
 }
 
-export function getTransactionById(id: string): Transaction {
+export function getTransactionById(userId: string, id: string): Transaction {
   const db = getDb();
   const row = db.prepare(`
     ${BASE_QUERY}
-    WHERE t.id = ?
-  `).get(id) as TransactionWithJoins | undefined;
+    WHERE t.user_id = ? AND t.id = ?
+  `).get(userId, id) as TransactionWithJoins | undefined;
 
   if (!row) {
     throw new NotFoundError('Transaction', id);
@@ -80,7 +80,7 @@ export function getTransactionById(id: string): Transaction {
   return rowToTransaction(row);
 }
 
-export function createTransaction(accountId: string, data: CreateTransactionRequest): Transaction {
+export function createTransaction(userId: string, accountId: string, data: CreateTransactionRequest): Transaction {
   const db = getDb();
 
   // Validate date is not in future
@@ -92,15 +92,15 @@ export function createTransaction(accountId: string, data: CreateTransactionRequ
     });
   }
 
-  // Validate account exists
-  const account = db.prepare('SELECT id FROM account WHERE id = ?').get(accountId);
+  // Validate account exists and belongs to user
+  const account = db.prepare('SELECT id FROM account WHERE user_id = ? AND id = ?').get(userId, accountId);
   if (!account) {
     throw new NotFoundError('Account', accountId);
   }
 
-  // Validate category exists if provided
+  // Validate category exists and belongs to user if provided
   if (data.categoryId) {
-    const category = db.prepare('SELECT id FROM category WHERE id = ?').get(data.categoryId);
+    const category = db.prepare('SELECT id FROM category WHERE user_id = ? AND id = ?').get(userId, data.categoryId);
     if (!category) {
       throw new NotFoundError('Category', data.categoryId);
     }
@@ -110,10 +110,11 @@ export function createTransaction(accountId: string, data: CreateTransactionRequ
   const now = new Date().toISOString();
 
   db.prepare(`
-    INSERT INTO "transaction" (id, account_id, category_id, date, amount, payee, memo, is_cleared, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO "transaction" (id, user_id, account_id, category_id, date, amount, payee, memo, is_cleared, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
+    userId,
     accountId,
     data.categoryId ?? null,
     data.date,
@@ -127,17 +128,17 @@ export function createTransaction(accountId: string, data: CreateTransactionRequ
 
   // Update payee-category association if both payee and category are provided
   if (data.payee && data.categoryId) {
-    upsertPayee(data.payee, data.categoryId);
+    upsertPayee(userId, data.payee, data.categoryId);
   }
 
-  return getTransactionById(id);
+  return getTransactionById(userId, id);
 }
 
-export function updateTransaction(id: string, data: UpdateTransactionRequest): Transaction {
+export function updateTransaction(userId: string, id: string, data: UpdateTransactionRequest): Transaction {
   const db = getDb();
 
   // Get existing transaction
-  const existing = db.prepare('SELECT * FROM "transaction" WHERE id = ?').get(id) as TransactionRow | undefined;
+  const existing = db.prepare('SELECT * FROM "transaction" WHERE user_id = ? AND id = ?').get(userId, id) as TransactionRow | undefined;
   if (!existing) {
     throw new NotFoundError('Transaction', id);
   }
@@ -192,6 +193,14 @@ export function updateTransaction(id: string, data: UpdateTransactionRequest): T
     }
   }
 
+  // Validate category belongs to user if provided
+  if (data.categoryId) {
+    const category = db.prepare('SELECT id FROM category WHERE user_id = ? AND id = ?').get(userId, data.categoryId);
+    if (!category) {
+      throw new NotFoundError('Category', data.categoryId);
+    }
+  }
+
   // Starting balance: cannot change amount or add category
   if (isStartingBalance) {
     if (data.amount !== undefined) {
@@ -240,24 +249,24 @@ export function updateTransaction(id: string, data: UpdateTransactionRequest): T
   }
 
   if (updates.length > 0) {
-    params.push(id);
-    db.prepare(`UPDATE "transaction" SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+    params.push(userId, id);
+    db.prepare(`UPDATE "transaction" SET ${updates.join(', ')} WHERE user_id = ? AND id = ?`).run(...params);
   }
 
   // Update payee-category association if payee or categoryId changed
   // Get the final state of the transaction to determine payee and category
-  const updated = getTransactionById(id);
+  const updated = getTransactionById(userId, id);
   if (updated.payee && updated.categoryId && !updated.transferId) {
-    upsertPayee(updated.payee, updated.categoryId);
+    upsertPayee(userId, updated.payee, updated.categoryId);
   }
 
   return updated;
 }
 
-export function deleteTransaction(id: string): void {
+export function deleteTransaction(userId: string, id: string): void {
   const db = getDb();
 
-  const existing = db.prepare('SELECT * FROM "transaction" WHERE id = ?').get(id) as TransactionRow | undefined;
+  const existing = db.prepare('SELECT * FROM "transaction" WHERE user_id = ? AND id = ?').get(userId, id) as TransactionRow | undefined;
   if (!existing) {
     throw new NotFoundError('Transaction', id);
   }
@@ -266,29 +275,29 @@ export function deleteTransaction(id: string): void {
   if (existing.transfer_id) {
     const transfer = db.prepare('SELECT * FROM transfer WHERE id = ?').get(existing.transfer_id) as { from_txn_id: string; to_txn_id: string } | undefined;
     if (transfer) {
-      db.prepare('DELETE FROM "transaction" WHERE id = ?').run(transfer.from_txn_id);
-      db.prepare('DELETE FROM "transaction" WHERE id = ?').run(transfer.to_txn_id);
+      db.prepare('DELETE FROM "transaction" WHERE user_id = ? AND id = ?').run(userId, transfer.from_txn_id);
+      db.prepare('DELETE FROM "transaction" WHERE user_id = ? AND id = ?').run(userId, transfer.to_txn_id);
       db.prepare('DELETE FROM transfer WHERE id = ?').run(existing.transfer_id);
       return;
     }
   }
 
-  db.prepare('DELETE FROM "transaction" WHERE id = ?').run(id);
+  db.prepare('DELETE FROM "transaction" WHERE user_id = ? AND id = ?').run(userId, id);
 }
 
-export function createStartingBalance(accountId: string, amount: number, date: string): Transaction {
+export function createStartingBalance(userId: string, accountId: string, amount: number, date: string): Transaction {
   const db = getDb();
 
-  // Validate account exists
-  const account = db.prepare('SELECT id FROM account WHERE id = ?').get(accountId);
+  // Validate account exists and belongs to user
+  const account = db.prepare('SELECT id FROM account WHERE user_id = ? AND id = ?').get(userId, accountId);
   if (!account) {
     throw new NotFoundError('Account', accountId);
   }
 
   // Check if starting balance already exists
   const existing = db.prepare(`
-    SELECT id FROM "transaction" WHERE account_id = ? AND is_starting_balance = 1
-  `).get(accountId);
+    SELECT id FROM "transaction" WHERE user_id = ? AND account_id = ? AND is_starting_balance = 1
+  `).get(userId, accountId);
 
   if (existing) {
     throw new BusinessRuleError(
@@ -302,21 +311,22 @@ export function createStartingBalance(accountId: string, amount: number, date: s
   const now = new Date().toISOString();
 
   db.prepare(`
-    INSERT INTO "transaction" (id, account_id, date, amount, payee, is_cleared, is_starting_balance, created_at, updated_at)
-    VALUES (?, ?, ?, ?, 'Starting Balance', 1, 1, ?, ?)
-  `).run(id, accountId, date, amount, now, now);
+    INSERT INTO "transaction" (id, user_id, account_id, date, amount, payee, is_cleared, is_starting_balance, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, 'Starting Balance', 1, 1, ?, ?)
+  `).run(id, userId, accountId, date, amount, now, now);
 
-  return getTransactionById(id);
+  return getTransactionById(userId, id);
 }
 
 export function importTransactions(
+  userId: string,
   accountId: string,
   items: ImportTransactionItem[]
 ): ImportTransactionsResponse {
   const db = getDb();
 
-  // Validate account exists
-  const account = db.prepare('SELECT id FROM account WHERE id = ?').get(accountId);
+  // Validate account exists and belongs to user
+  const account = db.prepare('SELECT id FROM account WHERE user_id = ? AND id = ?').get(userId, accountId);
   if (!account) {
     throw new NotFoundError('Account', accountId);
   }
@@ -337,14 +347,24 @@ export function importTransactions(
     // Check for duplicate: same date + amount (payee doesn't need to match - user may have entered manually with different name)
     const duplicate = db.prepare(`
       SELECT id FROM "transaction"
-      WHERE account_id = ?
+      WHERE user_id = ? AND account_id = ?
         AND date = ?
         AND amount = ?
-    `).get(accountId, item.date, item.amount);
+    `).get(userId, accountId, item.date, item.amount);
 
     if (duplicate) {
       skipped++;
       continue;
+    }
+
+    // Validate category belongs to user if provided
+    if (item.categoryId) {
+      const category = db.prepare('SELECT id FROM category WHERE user_id = ? AND id = ?').get(userId, item.categoryId);
+      if (!category) {
+        // Skip transactions with invalid categories
+        skipped++;
+        continue;
+      }
     }
 
     // Create the transaction
@@ -352,10 +372,11 @@ export function importTransactions(
     const now = new Date().toISOString();
 
     db.prepare(`
-      INSERT INTO "transaction" (id, account_id, category_id, date, amount, payee, memo, is_cleared, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+      INSERT INTO "transaction" (id, user_id, account_id, category_id, date, amount, payee, memo, is_cleared, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
     `).run(
       id,
+      userId,
       accountId,
       item.categoryId ?? null,
       item.date,
@@ -366,7 +387,7 @@ export function importTransactions(
       now
     );
 
-    importedTransactions.push(getTransactionById(id));
+    importedTransactions.push(getTransactionById(userId, id));
   }
 
   return {
@@ -376,11 +397,11 @@ export function importTransactions(
   };
 }
 
-export function reconcileAccount(accountId: string): { reconciledCount: number } {
+export function reconcileAccount(userId: string, accountId: string): { reconciledCount: number } {
   const db = getDb();
 
-  // Validate account exists
-  const account = db.prepare('SELECT id FROM account WHERE id = ?').get(accountId);
+  // Validate account exists and belongs to user
+  const account = db.prepare('SELECT id FROM account WHERE user_id = ? AND id = ?').get(userId, accountId);
   if (!account) {
     throw new NotFoundError('Account', accountId);
   }
@@ -389,8 +410,8 @@ export function reconcileAccount(accountId: string): { reconciledCount: number }
   const result = db.prepare(`
     UPDATE "transaction"
     SET is_cleared = 2
-    WHERE account_id = ? AND is_cleared = 1
-  `).run(accountId);
+    WHERE user_id = ? AND account_id = ? AND is_cleared = 1
+  `).run(userId, accountId);
 
   return { reconciledCount: result.changes };
 }

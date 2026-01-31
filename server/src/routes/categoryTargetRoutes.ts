@@ -1,14 +1,15 @@
-import { Router } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import * as categoryTargetService from '../services/categoryTargetService.js';
-import { CreateCategoryTargetRequest, UpdateCategoryTargetRequest } from '../models/types.js';
+import { CreateCategoryTargetRequest, UpdateCategoryTargetRequest, AuthenticatedRequest } from '../models/types.js';
 
 const router = Router();
 
 // GET /api/categories/:categoryId/target
-router.get('/:categoryId/target', (req, res, next) => {
+router.get('/:categoryId/target', (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { categoryId } = req.params;
-    const target = categoryTargetService.getTargetByCategory(categoryId);
+    const userId = (req as AuthenticatedRequest).user.userId;
+    const categoryId = req.params.categoryId as string;
+    const target = categoryTargetService.getTargetByCategory(userId, categoryId);
 
     if (!target) {
       return res.status(404).json({ error: 'Category target not found' });
@@ -21,11 +22,12 @@ router.get('/:categoryId/target', (req, res, next) => {
 });
 
 // POST /api/categories/:categoryId/target
-router.post('/:categoryId/target', (req, res, next) => {
+router.post('/:categoryId/target', (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { categoryId } = req.params;
+    const userId = (req as AuthenticatedRequest).user.userId;
+    const categoryId = req.params.categoryId as string;
     const data = req.body as CreateCategoryTargetRequest;
-    const target = categoryTargetService.createCategoryTarget(categoryId, data);
+    const target = categoryTargetService.createCategoryTarget(userId, categoryId, data);
     res.status(201).json(target);
   } catch (error) {
     next(error);
@@ -33,11 +35,12 @@ router.post('/:categoryId/target', (req, res, next) => {
 });
 
 // PUT /api/categories/:categoryId/target
-router.put('/:categoryId/target', (req, res, next) => {
+router.put('/:categoryId/target', (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { categoryId } = req.params;
+    const userId = (req as AuthenticatedRequest).user.userId;
+    const categoryId = req.params.categoryId as string;
     const data = req.body as UpdateCategoryTargetRequest;
-    const target = categoryTargetService.updateCategoryTarget(categoryId, data);
+    const target = categoryTargetService.updateCategoryTarget(userId, categoryId, data);
     res.json(target);
   } catch (error) {
     next(error);
@@ -45,10 +48,11 @@ router.put('/:categoryId/target', (req, res, next) => {
 });
 
 // DELETE /api/categories/:categoryId/target
-router.delete('/:categoryId/target', (req, res, next) => {
+router.delete('/:categoryId/target', (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { categoryId } = req.params;
-    categoryTargetService.deleteCategoryTarget(categoryId);
+    const userId = (req as AuthenticatedRequest).user.userId;
+    const categoryId = req.params.categoryId as string;
+    categoryTargetService.deleteCategoryTarget(userId, categoryId);
     res.status(204).send();
   } catch (error) {
     next(error);

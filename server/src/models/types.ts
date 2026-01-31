@@ -1,6 +1,29 @@
+import { Request } from 'express';
+
 // Database row types (as stored in SQLite)
+
+// User and auth types
+export interface UserRow {
+  id: string;
+  google_id: string | null;
+  email: string;
+  name: string | null;
+  picture: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RefreshTokenRow {
+  id: string;
+  user_id: string;
+  token_hash: string;
+  expires_at: string;
+  created_at: string;
+}
+
 export interface AccountRow {
   id: string;
+  user_id: string;
   name: string;
   is_closed: number;
   created_at: string;
@@ -9,6 +32,7 @@ export interface AccountRow {
 
 export interface CategoryGroupRow {
   id: string;
+  user_id: string;
   name: string;
   sort_order: number;
   created_at: string;
@@ -17,6 +41,7 @@ export interface CategoryGroupRow {
 
 export interface CategoryRow {
   id: string;
+  user_id: string;
   group_id: string | null;
   name: string;
   sort_order: number;
@@ -26,6 +51,7 @@ export interface CategoryRow {
 
 export interface TransactionRow {
   id: string;
+  user_id: string;
   account_id: string;
   category_id: string | null;
   transfer_id: string | null;
@@ -48,6 +74,7 @@ export interface TransferRow {
 
 export interface MonthlyBudgetRow {
   id: string;
+  user_id: string;
   category_id: string;
   year_month: string;
   assigned_amount: number;
@@ -57,6 +84,7 @@ export interface MonthlyBudgetRow {
 
 export interface PayeeRow {
   id: string;
+  user_id: string;
   name: string;
   last_category_id: string | null;
   created_at: string;
@@ -65,6 +93,7 @@ export interface PayeeRow {
 
 export interface CategoryTargetRow {
   id: string;
+  user_id: string;
   category_id: string;
   target_type: 'monthly' | 'yearly' | 'by_date';
   target_amount: number;
@@ -76,6 +105,7 @@ export interface CategoryTargetRow {
 
 export interface ImportPayeeMappingRow {
   id: string;
+  user_id: string;
   original_payee: string;
   payee_id: string;
   created_at: string;
@@ -89,6 +119,26 @@ export interface ImportPayeeMappingWithPayeeRow extends ImportPayeeMappingRow {
 }
 
 // API response types (camelCase, with computed fields)
+
+// User types
+export interface User {
+  id: string;
+  googleId: string | null;
+  email: string;
+  name: string | null;
+  picture: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Authenticated request type for Express middleware
+export interface AuthenticatedRequest extends Request {
+  user: {
+    userId: string;
+    email: string;
+  };
+}
+
 export interface Account {
   id: string;
   name: string;

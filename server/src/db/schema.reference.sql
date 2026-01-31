@@ -1,55 +1,100 @@
 -- YNAB-Clone Database Schema
 -- All amounts stored as INTEGER (cents/øre) to avoid floating-point issues
 -- Positive = inflow, Negative = outflow
+-- All data tables have user_id for multi-tenancy
+
+-- User table (Google OAuth)
+CREATE TABLE IF NOT EXISTS user (
+    id TEXT PRIMARY KEY,
+    google_id TEXT UNIQUE,
+    email TEXT NOT NULL UNIQUE,
+    name TEXT,
+    picture TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_google_id ON user(google_id);
+CREATE INDEX IF NOT EXISTS idx_user_email ON user(email);
+
+-- Refresh token table (JWT refresh tokens)
+CREATE TABLE IF NOT EXISTS refresh_token (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    token_hash TEXT NOT NULL UNIQUE,
+    expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_refresh_token_hash ON refresh_token(token_hash);
+CREATE INDEX IF NOT EXISTS idx_refresh_token_user ON refresh_token(user_id);
 
 -- Account table
 CREATE TABLE IF NOT EXISTS account (
     id TEXT PRIMARY KEY,
-    name TEXT NOT NULL UNIQUE,
+    user_id TEXT NOT NULL,
+    name TEXT NOT NULL,
     is_closed INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE,
+    UNIQUE (user_id, name)
 );
+
+CREATE INDEX IF NOT EXISTS idx_account_user ON account(user_id);
 
 -- Category group table
 CREATE TABLE IF NOT EXISTS category_group (
     id TEXT PRIMARY KEY,
-    name TEXT NOT NULL UNIQUE,
+    user_id TEXT NOT NULL,
+    name TEXT NOT NULL,
     sort_order INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE,
+    UNIQUE (user_id, name)
 );
 
+CREATE INDEX IF NOT EXISTS idx_category_group_user ON category_group(user_id);
 CREATE INDEX IF NOT EXISTS idx_category_group_sort ON category_group(sort_order);
 
 -- Payee table (stores payee-category associations for auto-fill)
-CREATE TABLE IF NOT EXISTS "payee" (
+CREATE TABLE IF NOT EXISTS payee (
     id TEXT PRIMARY KEY,
-    name TEXT NOT NULL UNIQUE,
+    user_id TEXT NOT NULL,
+    name TEXT NOT NULL,
     last_category_id TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-    FOREIGN KEY (last_category_id) REFERENCES category(id) ON DELETE SET NULL
+    FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE,
+    FOREIGN KEY (last_category_id) REFERENCES category(id) ON DELETE SET NULL,
+    UNIQUE (user_id, name)
 );
 
+CREATE INDEX IF NOT EXISTS idx_payee_user ON payee(user_id);
 CREATE INDEX IF NOT EXISTS idx_payee_name ON payee(name);
 
 -- Category table
 CREATE TABLE IF NOT EXISTS category (
     id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
     group_id TEXT,
     name TEXT NOT NULL,
     sort_order INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE,
     FOREIGN KEY (group_id) REFERENCES category_group(id) ON DELETE SET NULL,
-    UNIQUE (group_id, name)
+    UNIQUE (user_id, group_id, name)
 );
 
+CREATE INDEX IF NOT EXISTS idx_category_user ON category(user_id);
 CREATE INDEX IF NOT EXISTS idx_category_group ON category(group_id);
 CREATE INDEX IF NOT EXISTS idx_category_sort ON category(group_id, sort_order);
 
 -- Transfer table (links two transactions)
+-- No user_id needed - validates through transaction ownership
 CREATE TABLE IF NOT EXISTS transfer (
     id TEXT PRIMARY KEY,
     from_txn_id TEXT NOT NULL,
@@ -64,6 +109,7 @@ CREATE TABLE IF NOT EXISTS transfer (
 -- is_cleared: 0 = uncleared, 1 = cleared, 2 = reconciled
 CREATE TABLE IF NOT EXISTS "transaction" (
     id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
     account_id TEXT NOT NULL,
     category_id TEXT,
     transfer_id TEXT,
@@ -75,6 +121,7 @@ CREATE TABLE IF NOT EXISTS "transaction" (
     is_starting_balance INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE,
     FOREIGN KEY (account_id) REFERENCES account(id) ON DELETE RESTRICT,
     FOREIGN KEY (category_id) REFERENCES category(id) ON DELETE SET NULL,
     FOREIGN KEY (transfer_id) REFERENCES transfer(id) ON DELETE SET NULL,
@@ -82,33 +129,76 @@ CREATE TABLE IF NOT EXISTS "transaction" (
     CHECK (is_starting_balance = 0 OR category_id IS NULL)
 );
 
+CREATE INDEX IF NOT EXISTS idx_transaction_user ON "transaction"(user_id);
 CREATE INDEX IF NOT EXISTS idx_transaction_account ON "transaction"(account_id);
 CREATE INDEX IF NOT EXISTS idx_transaction_category ON "transaction"(category_id);
 CREATE INDEX IF NOT EXISTS idx_transaction_date ON "transaction"(date);
 CREATE INDEX IF NOT EXISTS idx_transaction_transfer ON "transaction"(transfer_id);
 CREATE INDEX IF NOT EXISTS idx_transaction_year_month ON "transaction"(substr(date, 1, 7));
 
--- Add foreign keys to transfer table
--- Note: SQLite doesn't support ALTER TABLE ADD CONSTRAINT, these are enforced by app logic
-
 -- Monthly budget table
 CREATE TABLE IF NOT EXISTS monthly_budget (
     id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
     category_id TEXT NOT NULL,
     year_month TEXT NOT NULL,
     assigned_amount INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE,
     FOREIGN KEY (category_id) REFERENCES category(id) ON DELETE CASCADE,
-    UNIQUE (category_id, year_month),
+    UNIQUE (user_id, category_id, year_month),
     CHECK (year_month GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]')
 );
 
+CREATE INDEX IF NOT EXISTS idx_monthly_budget_user ON monthly_budget(user_id);
 CREATE INDEX IF NOT EXISTS idx_monthly_budget_category ON monthly_budget(category_id);
 CREATE INDEX IF NOT EXISTS idx_monthly_budget_month ON monthly_budget(year_month);
 CREATE INDEX IF NOT EXISTS idx_monthly_budget_lookup ON monthly_budget(category_id, year_month);
 
+-- Category target table
+CREATE TABLE IF NOT EXISTS category_target (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    category_id TEXT NOT NULL,
+    target_type TEXT NOT NULL CHECK (target_type IN ('monthly', 'yearly', 'by_date')),
+    target_amount INTEGER NOT NULL,
+    target_date TEXT NOT NULL,
+    recurrence_day INTEGER,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE,
+    FOREIGN KEY (category_id) REFERENCES category(id) ON DELETE CASCADE,
+    UNIQUE (user_id, category_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_category_target_user ON category_target(user_id);
+CREATE INDEX IF NOT EXISTS idx_category_target_category ON category_target(category_id);
+
+-- Import payee mapping table (maps payees from import files to payee table)
+CREATE TABLE IF NOT EXISTS import_payee_mapping (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    original_payee TEXT NOT NULL,
+    payee_id TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE,
+    FOREIGN KEY (payee_id) REFERENCES payee(id) ON DELETE CASCADE,
+    UNIQUE (user_id, original_payee)
+);
+
+CREATE INDEX IF NOT EXISTS idx_import_payee_mapping_user ON import_payee_mapping(user_id);
+CREATE INDEX IF NOT EXISTS idx_import_payee_mapping_original ON import_payee_mapping(original_payee);
+
 -- Triggers for updated_at timestamps
+CREATE TRIGGER IF NOT EXISTS trg_user_updated
+    AFTER UPDATE ON user
+    FOR EACH ROW
+BEGIN
+    UPDATE user SET updated_at = datetime('now') WHERE id = NEW.id;
+END;
+
 CREATE TRIGGER IF NOT EXISTS trg_account_updated
     AFTER UPDATE ON account
     FOR EACH ROW
@@ -151,40 +241,12 @@ BEGIN
     UPDATE monthly_budget SET updated_at = datetime('now') WHERE id = NEW.id;
 END;
 
--- Category target table
-CREATE TABLE IF NOT EXISTS category_target (
-    id TEXT PRIMARY KEY,
-    category_id TEXT NOT NULL,
-    target_type TEXT NOT NULL CHECK (target_type IN ('monthly', 'yearly', 'by_date')),
-    target_amount INTEGER NOT NULL,
-    target_date TEXT NOT NULL,
-    recurrence_day INTEGER,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-    FOREIGN KEY (category_id) REFERENCES category(id) ON DELETE CASCADE,
-    UNIQUE (category_id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_category_target_category ON category_target(category_id);
-
 CREATE TRIGGER IF NOT EXISTS trg_category_target_updated
     AFTER UPDATE ON category_target
     FOR EACH ROW
 BEGIN
     UPDATE category_target SET updated_at = datetime('now') WHERE id = NEW.id;
 END;
-
--- Import payee mapping table (maps payees from import files to payee table)
-CREATE TABLE IF NOT EXISTS import_payee_mapping (
-    id TEXT PRIMARY KEY,
-    original_payee TEXT NOT NULL UNIQUE,
-    payee_id TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-    FOREIGN KEY (payee_id) REFERENCES payee(id) ON DELETE CASCADE
-);
-
-CREATE INDEX IF NOT EXISTS idx_import_payee_mapping_original ON import_payee_mapping(original_payee);
 
 CREATE TRIGGER IF NOT EXISTS trg_import_payee_mapping_updated
     AFTER UPDATE ON import_payee_mapping

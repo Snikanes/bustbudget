@@ -21,16 +21,16 @@ function rowToTarget(row: CategoryTargetRow): CategoryTarget {
   };
 }
 
-export function getTargetByCategory(categoryId: string): CategoryTarget | null {
+export function getTargetByCategory(userId: string, categoryId: string): CategoryTarget | null {
   const db = getDb();
   const row = db
-    .prepare('SELECT * FROM category_target WHERE category_id = ?')
-    .get(categoryId) as CategoryTargetRow | undefined;
+    .prepare('SELECT * FROM category_target WHERE user_id = ? AND category_id = ?')
+    .get(userId, categoryId) as CategoryTargetRow | undefined;
 
   return row ? rowToTarget(row) : null;
 }
 
-export function getTargetsForCategories(categoryIds: string[]): Map<string, CategoryTarget> {
+export function getTargetsForCategories(userId: string, categoryIds: string[]): Map<string, CategoryTarget> {
   if (categoryIds.length === 0) {
     return new Map();
   }
@@ -38,8 +38,8 @@ export function getTargetsForCategories(categoryIds: string[]): Map<string, Cate
   const db = getDb();
   const placeholders = categoryIds.map(() => '?').join(',');
   const rows = db
-    .prepare(`SELECT * FROM category_target WHERE category_id IN (${placeholders})`)
-    .all(...categoryIds) as CategoryTargetRow[];
+    .prepare(`SELECT * FROM category_target WHERE user_id = ? AND category_id IN (${placeholders})`)
+    .all(userId, ...categoryIds) as CategoryTargetRow[];
 
   const targetsMap = new Map<string, CategoryTarget>();
   for (const row of rows) {
@@ -50,13 +50,14 @@ export function getTargetsForCategories(categoryIds: string[]): Map<string, Cate
 }
 
 export function createCategoryTarget(
+  userId: string,
   categoryId: string,
   data: CreateCategoryTargetRequest
 ): CategoryTarget {
   const db = getDb();
 
-  // Validate category exists
-  const category = db.prepare('SELECT id FROM category WHERE id = ?').get(categoryId);
+  // Validate category exists and belongs to user
+  const category = db.prepare('SELECT id FROM category WHERE user_id = ? AND id = ?').get(userId, categoryId);
   if (!category) {
     throw new NotFoundError('Category', categoryId);
   }
@@ -80,8 +81,8 @@ export function createCategoryTarget(
 
   // Check if target already exists
   const existing = db
-    .prepare('SELECT id FROM category_target WHERE category_id = ?')
-    .get(categoryId);
+    .prepare('SELECT id FROM category_target WHERE user_id = ? AND category_id = ?')
+    .get(userId, categoryId);
   if (existing) {
     throw new ValidationError('Category already has a target');
   }
@@ -91,10 +92,11 @@ export function createCategoryTarget(
 
   db.prepare(`
     INSERT INTO category_target (
-      id, category_id, target_type, target_amount, target_date, recurrence_day, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      id, user_id, category_id, target_type, target_amount, target_date, recurrence_day, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
+    userId,
     categoryId,
     data.targetType,
     data.targetAmount,
@@ -117,6 +119,7 @@ export function createCategoryTarget(
 }
 
 export function updateCategoryTarget(
+  userId: string,
   categoryId: string,
   data: UpdateCategoryTargetRequest
 ): CategoryTarget {
@@ -124,8 +127,8 @@ export function updateCategoryTarget(
 
   // Get existing target
   const existing = db
-    .prepare('SELECT * FROM category_target WHERE category_id = ?')
-    .get(categoryId) as CategoryTargetRow | undefined;
+    .prepare('SELECT * FROM category_target WHERE user_id = ? AND category_id = ?')
+    .get(userId, categoryId) as CategoryTargetRow | undefined;
 
   if (!existing) {
     throw new NotFoundError('Category target', categoryId);
@@ -148,11 +151,9 @@ export function updateCategoryTarget(
     throw new ValidationError('Target date must be in YYYY-MM-DD format');
   }
 
-  const now = new Date().toISOString();
-
   // Build update query dynamically
   const updates: string[] = [];
-  const values: any[] = [];
+  const values: unknown[] = [];
 
   if (data.targetType !== undefined) {
     updates.push('target_type = ?');
@@ -186,12 +187,12 @@ export function updateCategoryTarget(
   return rowToTarget(updated);
 }
 
-export function deleteCategoryTarget(categoryId: string): void {
+export function deleteCategoryTarget(userId: string, categoryId: string): void {
   const db = getDb();
 
   const result = db
-    .prepare('DELETE FROM category_target WHERE category_id = ?')
-    .run(categoryId);
+    .prepare('DELETE FROM category_target WHERE user_id = ? AND category_id = ?')
+    .run(userId, categoryId);
 
   if (result.changes === 0) {
     throw new NotFoundError('Category target', categoryId);

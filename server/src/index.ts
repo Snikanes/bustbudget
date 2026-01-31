@@ -1,6 +1,8 @@
 import express from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import { initializeDatabase } from './db/index.js';
+import authRoutes from './routes/authRoutes.js';
 import accountRoutes from './routes/accountRoutes.js';
 import categoryGroupRoutes from './routes/categoryGroupRoutes.js';
 import categoryRoutes from './routes/categoryRoutes.js';
@@ -11,24 +13,32 @@ import budgetRoutes from './routes/budgetRoutes.js';
 import payeeRoutes from './routes/payeeRoutes.js';
 import importPayeeMappingRoutes from './routes/importPayeeMappingRoutes.js';
 import { errorHandler } from './middleware/errorHandler.js';
+import { requireAuth } from './middleware/auth.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: ['http://localhost:5173', 'http://localhost:5174'],
+  credentials: true, // Allow cookies
+}));
 app.use(express.json());
+app.use(cookieParser());
 
-// Routes
-app.use('/api/accounts', accountRoutes);
-app.use('/api/category-groups', categoryGroupRoutes);
-app.use('/api/categories', categoryRoutes);
-app.use('/api/categories', categoryTargetRoutes);
-app.use('/api/transactions', transactionRoutes);
-app.use('/api/transfers', transferRoutes);
-app.use('/api/budgets', budgetRoutes);
-app.use('/api/payees', payeeRoutes);
-app.use('/api/import-payee-mappings', importPayeeMappingRoutes);
+// Public routes (no auth required)
+app.use('/api/auth', authRoutes);
+
+// Protected routes (require authentication)
+app.use('/api/accounts', requireAuth, accountRoutes);
+app.use('/api/category-groups', requireAuth, categoryGroupRoutes);
+app.use('/api/categories', requireAuth, categoryRoutes);
+app.use('/api/categories', requireAuth, categoryTargetRoutes);
+app.use('/api/transactions', requireAuth, transactionRoutes);
+app.use('/api/transfers', requireAuth, transferRoutes);
+app.use('/api/budgets', requireAuth, budgetRoutes);
+app.use('/api/payees', requireAuth, payeeRoutes);
+app.use('/api/import-payee-mappings', requireAuth, importPayeeMappingRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

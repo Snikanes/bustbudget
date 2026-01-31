@@ -17,7 +17,7 @@ interface CategoryBudgetRow {
   cumulative_activity: number;
 }
 
-export function getBudgetForMonth(month: string): BudgetMonth {
+export function getBudgetForMonth(userId: string, month: string): BudgetMonth {
   const db = getDb();
 
   // Get all categories with their budget data
@@ -25,12 +25,13 @@ export function getBudgetForMonth(month: string): BudgetMonth {
     WITH monthly_assigned AS (
       SELECT category_id, assigned_amount
       FROM monthly_budget
-      WHERE year_month = ?
+      WHERE user_id = ? AND year_month = ?
     ),
     monthly_activity AS (
       SELECT category_id, COALESCE(SUM(amount), 0) as activity
       FROM "transaction"
-      WHERE category_id IS NOT NULL
+      WHERE user_id = ?
+        AND category_id IS NOT NULL
         AND substr(date, 1, 7) = ?
         AND transfer_id IS NULL
       GROUP BY category_id
@@ -38,13 +39,14 @@ export function getBudgetForMonth(month: string): BudgetMonth {
     cumulative_assigned AS (
       SELECT category_id, COALESCE(SUM(assigned_amount), 0) as total
       FROM monthly_budget
-      WHERE year_month <= ?
+      WHERE user_id = ? AND year_month <= ?
       GROUP BY category_id
     ),
     cumulative_activity AS (
       SELECT category_id, COALESCE(SUM(amount), 0) as total
       FROM "transaction"
-      WHERE category_id IS NOT NULL
+      WHERE user_id = ?
+        AND category_id IS NOT NULL
         AND substr(date, 1, 7) <= ?
         AND transfer_id IS NULL
       GROUP BY category_id
@@ -66,13 +68,14 @@ export function getBudgetForMonth(month: string): BudgetMonth {
     LEFT JOIN monthly_activity mact ON mact.category_id = c.id
     LEFT JOIN cumulative_assigned ca ON ca.category_id = c.id
     LEFT JOIN cumulative_activity cact ON cact.category_id = c.id
+    WHERE c.user_id = ?
     ORDER BY
       CASE WHEN c.group_id IS NULL THEN 1 ELSE 0 END,
       cg.sort_order,
       cg.name,
       c.sort_order,
       c.name
-  `).all(month, month, month, month) as CategoryBudgetRow[];
+  `).all(userId, month, userId, month, userId, month, userId, month, userId) as CategoryBudgetRow[];
 
   // Calculate total inflows (income to budget)
   // Income = positive transactions that are NOT transfers and NOT starting balances with categories
@@ -80,20 +83,22 @@ export function getBudgetForMonth(month: string): BudgetMonth {
   const inflowsResult = db.prepare(`
     SELECT COALESCE(SUM(amount), 0) as total
     FROM "transaction"
-    WHERE amount > 0
+    WHERE user_id = ?
+      AND amount > 0
       AND transfer_id IS NULL
       AND is_starting_balance = 0
       AND category_id IS NULL
       AND substr(date, 1, 7) <= ?
-  `).get(month) as { total: number };
+  `).get(userId, month) as { total: number };
 
   // Also include starting balances as inflows
   const startingBalancesResult = db.prepare(`
     SELECT COALESCE(SUM(amount), 0) as total
     FROM "transaction"
-    WHERE is_starting_balance = 1
+    WHERE user_id = ?
+      AND is_starting_balance = 1
       AND substr(date, 1, 7) <= ?
-  `).get(month) as { total: number };
+  `).get(userId, month) as { total: number };
 
   const totalInflows = inflowsResult.total + startingBalancesResult.total;
 
@@ -101,8 +106,8 @@ export function getBudgetForMonth(month: string): BudgetMonth {
   const totalAssignedResult = db.prepare(`
     SELECT COALESCE(SUM(assigned_amount), 0) as total
     FROM monthly_budget
-    WHERE year_month <= ?
-  `).get(month) as { total: number };
+    WHERE user_id = ? AND year_month <= ?
+  `).get(userId, month) as { total: number };
 
   const totalAssigned = totalAssignedResult.total;
 
@@ -111,7 +116,7 @@ export function getBudgetForMonth(month: string): BudgetMonth {
 
   // Get targets for all categories
   const categoryIds = rows.map(r => r.category_id);
-  const targetsMap = categoryTargetService.getTargetsForCategories(categoryIds);
+  const targetsMap = categoryTargetService.getTargetsForCategories(userId, categoryIds);
 
   // Group the categories
   const groupsMap = new Map<string, {
@@ -166,29 +171,30 @@ export function getBudgetForMonth(month: string): BudgetMonth {
 }
 
 export function updateBudgetEntry(
+  userId: string,
   month: string,
   categoryId: string,
   assigned: number
 ): MonthlyBudget {
   const db = getDb();
 
-  // Validate category exists
-  const category = db.prepare('SELECT id FROM category WHERE id = ?').get(categoryId);
+  // Validate category exists and belongs to user
+  const category = db.prepare('SELECT id FROM category WHERE user_id = ? AND id = ?').get(userId, categoryId);
   if (!category) {
     throw new NotFoundError('Category', categoryId);
   }
 
   // Check if entry exists
   const existing = db.prepare(`
-    SELECT * FROM monthly_budget WHERE category_id = ? AND year_month = ?
-  `).get(categoryId, month) as MonthlyBudgetRow | undefined;
+    SELECT * FROM monthly_budget WHERE user_id = ? AND category_id = ? AND year_month = ?
+  `).get(userId, categoryId, month) as MonthlyBudgetRow | undefined;
 
   const now = new Date().toISOString();
 
   if (existing) {
     db.prepare(`
-      UPDATE monthly_budget SET assigned_amount = ? WHERE id = ?
-    `).run(assigned, existing.id);
+      UPDATE monthly_budget SET assigned_amount = ? WHERE user_id = ? AND id = ?
+    `).run(assigned, userId, existing.id);
 
     return {
       id: existing.id,
@@ -201,9 +207,9 @@ export function updateBudgetEntry(
   } else {
     const id = uuidv4();
     db.prepare(`
-      INSERT INTO monthly_budget (id, category_id, year_month, assigned_amount, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(id, categoryId, month, assigned, now, now);
+      INSERT INTO monthly_budget (id, user_id, category_id, year_month, assigned_amount, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(id, userId, categoryId, month, assigned, now, now);
 
     return {
       id,
@@ -216,7 +222,7 @@ export function updateBudgetEntry(
   }
 }
 
-export function getAvailableToAssign(month: string): {
+export function getAvailableToAssign(userId: string, month: string): {
   availableToAssign: number;
   breakdown: {
     totalInflows: number;
@@ -231,19 +237,21 @@ export function getAvailableToAssign(month: string): {
   const inflowsResult = db.prepare(`
     SELECT COALESCE(SUM(amount), 0) as total
     FROM "transaction"
-    WHERE amount > 0
+    WHERE user_id = ?
+      AND amount > 0
       AND transfer_id IS NULL
       AND is_starting_balance = 0
       AND category_id IS NULL
       AND substr(date, 1, 7) <= ?
-  `).get(month) as { total: number };
+  `).get(userId, month) as { total: number };
 
   const startingBalancesResult = db.prepare(`
     SELECT COALESCE(SUM(amount), 0) as total
     FROM "transaction"
-    WHERE is_starting_balance = 1
+    WHERE user_id = ?
+      AND is_starting_balance = 1
       AND substr(date, 1, 7) <= ?
-  `).get(month) as { total: number };
+  `).get(userId, month) as { total: number };
 
   const totalInflows = inflowsResult.total + startingBalancesResult.total;
 
@@ -251,7 +259,8 @@ export function getAvailableToAssign(month: string): {
   const totalAssignedResult = db.prepare(`
     SELECT COALESCE(SUM(assigned_amount), 0) as total
     FROM monthly_budget
-  `).get() as { total: number };
+    WHERE user_id = ?
+  `).get(userId) as { total: number };
 
   const totalAssigned = totalAssignedResult.total;
 
@@ -265,21 +274,23 @@ export function getAvailableToAssign(month: string): {
       LEFT JOIN (
         SELECT category_id, SUM(assigned_amount) as total
         FROM monthly_budget
-        WHERE year_month <= ?
+        WHERE user_id = ? AND year_month <= ?
         GROUP BY category_id
       ) assigned ON assigned.category_id = c.id
       LEFT JOIN (
         SELECT category_id, SUM(amount) as total
         FROM "transaction"
-        WHERE category_id IS NOT NULL
+        WHERE user_id = ?
+          AND category_id IS NOT NULL
           AND transfer_id IS NULL
           AND substr(date, 1, 7) <= ?
         GROUP BY category_id
       ) activity ON activity.category_id = c.id
+      WHERE c.user_id = ?
     )
     SELECT COALESCE(SUM(CASE WHEN balance < 0 THEN balance ELSE 0 END), 0) as total
     FROM category_balances
-  `).get(month, month) as { total: number };
+  `).get(userId, month, userId, month, userId) as { total: number };
 
   const overspending = overspendingResult.total;
 
