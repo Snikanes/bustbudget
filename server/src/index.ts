@@ -19,9 +19,6 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
-// Initialize database
-initializeDatabase();
-
 // Routes
 app.use('/api/accounts', accountRoutes);
 app.use('/api/category-groups', categoryGroupRoutes);
@@ -41,6 +38,15 @@ app.get('/api/health', (req, res) => {
 // Error handling
 app.use(errorHandler);
 
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+// Initialize database and start server
+async function start() {
+  await initializeDatabase();
+  app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+}
+
+start().catch((err) => {
+  console.error('Failed to start server:', err);
+  process.exit(1);
 });
