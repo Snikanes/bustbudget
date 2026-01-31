@@ -216,13 +216,14 @@ export function TargetProgressText({
     );
 
     // Calculate monthly amount needed (remaining / months remaining)
-    // Use available instead of assigned to account for existing progress
-    const actualRemaining = target.targetAmount - available;
+    // Available includes this month's assignment, so subtract it to get starting point
+    // If assigned is negative, treat it as 0 (negative means money moved out)
+    const effectiveAssigned = Math.max(0, assigned);
+    const availableBeforeThisMonth = available - effectiveAssigned;
+    const actualRemaining = target.targetAmount - availableBeforeThisMonth;
     const monthlyTarget = Math.ceil(actualRemaining / monthsRemaining);
 
     // Calculate how much more is needed this month after what's been assigned
-    // If assigned is negative, treat it as 0 (negative means money moved out)
-    const effectiveAssigned = Math.max(0, assigned);
     const moreNeededThisMonth = Math.max(0, monthlyTarget - effectiveAssigned);
 
     // If already assigned enough this month, show as on track
