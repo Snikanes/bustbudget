@@ -429,6 +429,51 @@ describe('TargetProgressIndicator', () => {
     });
   });
 
+  describe('Negative Assigned Amount', () => {
+    it('should show no progress bar when assigned is negative', () => {
+      const target = createMockTarget({
+        targetType: 'by_date',
+        targetAmount: 90000, // 900 kr
+        targetDate: '2026-02-20',
+      });
+      const { container } = render(
+        <TargetProgressIndicator
+          target={target}
+          assigned={-70731} // -707.31 kr (negative)
+          activity={70731} // +707.31 kr (offset)
+          available={0}
+          currentMonth="2026-01"
+        />
+      );
+
+      const progressBars = container.querySelectorAll('.h-full');
+      if (progressBars.length > 0) {
+        // Should show 0% or minimal width
+        const width = progressBars[0].getAttribute('style')?.match(/width:\s*([\d.]+)%/)?.[1];
+        expect(parseFloat(width || '0')).toBeLessThanOrEqual(1);
+      }
+    });
+
+    it('should not show as overspent when negative assigned is offset by activity', () => {
+      const target = createMockTarget({ targetAmount: 100000 });
+      const { container } = render(
+        <TargetProgressIndicator
+          target={target}
+          assigned={-50000} // Negative assigned
+          activity={50000} // Positive activity offsets it
+          available={0}
+          currentMonth="2026-01"
+        />
+      );
+
+      // Should not have red bar
+      const progressBars = container.querySelectorAll('.h-full');
+      progressBars.forEach((bar) => {
+        expect(bar).not.toHaveClass('bg-red-500');
+      });
+    });
+  });
+
   describe('Date Calculations', () => {
     it('should calculate on-track correctly for by_date target in first month', () => {
       const target = createMockTarget({

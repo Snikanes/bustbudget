@@ -17,10 +17,12 @@ function TargetProgressIndicator({
 }: TargetProgressIndicatorProps) {
   const spentAmount = Math.abs(activity);
   const isFunded = assigned >= target.targetAmount;
-  const isOverspent = spentAmount > assigned;
+  // Don't consider it overspent if assigned is negative (money moved out of category)
+  const isOverspent = assigned >= 0 && spentAmount > assigned;
   const isUnderfunded = assigned < target.targetAmount;
 
   // Calculate progress percentage based on assigned amount
+  // For negative assigned, show 0% progress
   const assignedProgress = Math.min(100, Math.max(0, (assigned / target.targetAmount) * 100));
 
   // Check if on track for by_date targets
@@ -117,7 +119,9 @@ export function TargetProgressText({
 }: TargetProgressIndicatorProps) {
   const spentAmount = Math.abs(activity);
   const isFunded = assigned >= target.targetAmount;
-  const isOverspent = spentAmount > assigned;
+  // Don't consider it overspent if assigned is negative (money moved out of category)
+  const isOverspent = assigned >= 0 && spentAmount > assigned;
+  // For negative assigned, remaining increases (target - negative = target + positive)
   const remaining = Math.max(0, target.targetAmount - assigned);
 
   // Check if on track for by_date targets

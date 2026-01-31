@@ -444,6 +444,69 @@ describe('TargetProgressText', () => {
     });
   });
 
+  describe('Negative Assigned Amount', () => {
+    it('should calculate remaining correctly when assigned is negative (by_date)', () => {
+      // Target: 900 kr, Assigned: -707.31 kr
+      // Remaining should be: 900 - (-707.31) = 1607.31 kr
+      const target = createMockTarget({
+        targetType: 'by_date',
+        targetAmount: 90000, // 900 kr
+        targetDate: '2026-02-20',
+      });
+      render(
+        <TargetProgressText
+          target={target}
+          assigned={-70731} // -707.31 kr
+          activity={70731} // +707.31 kr (offsets to 0 available)
+          available={0}
+          currentMonth="2026-01"
+        />
+      );
+
+      // Should show: 1607.31 more needed by the 20th
+      expect(screen.getByText(/1 607,31 more needed by the 20/)).toBeInTheDocument();
+    });
+
+    it('should calculate remaining correctly when assigned is negative (monthly)', () => {
+      // Target: 1000 kr, Assigned: -500 kr
+      // Remaining should be: 1000 - (-500) = 1500 kr
+      const target = createMockTarget({
+        targetType: 'monthly',
+        targetAmount: 100000, // 1000 kr
+      });
+      render(
+        <TargetProgressText
+          target={target}
+          assigned={-50000} // -500 kr
+          activity={25000} // +250 kr
+          available={-25000}
+          currentMonth="2026-01"
+        />
+      );
+
+      // Should show: 1500.00 more needed
+      expect(screen.getByText(/1 500,00 more needed/)).toBeInTheDocument();
+    });
+
+    it('should not show as overspent when assigned is negative and activity offsets it', () => {
+      const target = createMockTarget({ targetAmount: 100000 });
+      render(
+        <TargetProgressText
+          target={target}
+          assigned={-70731} // -707.31 kr
+          activity={70731} // +707.31 kr (offsets perfectly)
+          available={0}
+          currentMonth="2026-01"
+        />
+      );
+
+      // Should not show "Overspent"
+      expect(screen.queryByText(/Overspent/)).not.toBeInTheDocument();
+      // Should show remaining needed
+      expect(screen.getByText(/more needed/)).toBeInTheDocument();
+    });
+  });
+
   describe('Edge Cases', () => {
     it('should handle exactly 0 assigned and 0 activity', () => {
       const target = createMockTarget({ targetAmount: 100000 });
