@@ -102,6 +102,90 @@ describe('TargetProgressIndicator', () => {
     });
   });
 
+  describe('Progress Bar Width - by_date targets', () => {
+    it('should use available (total progress) for by_date targets, not assigned', () => {
+      // Target: 2095 kr by April
+      // Assigned this month: 523.75 kr
+      // Available (total): 1047.50 kr (includes previous months)
+      // Progress should be based on available: 1047.50 / 2095 ≈ 50%
+      const target = createMockTarget({
+        targetType: 'by_date',
+        targetAmount: 209500, // 2095 kr
+        targetDate: '2026-04-30',
+        createdAt: '2026-01-01T00:00:00Z',
+      });
+      const { container } = render(
+        <TargetProgressIndicator
+          target={target}
+          assigned={52375} // 523.75 kr this month
+          activity={0}
+          available={104750} // 1047.50 kr total
+          currentMonth="2026-02"
+        />
+      );
+
+      const progressBar = container.querySelector('.h-full');
+      // 104750 / 209500 * 100 = 50%
+      expect(progressBar).toHaveStyle({ width: '50%' });
+    });
+
+    it('should show increasing progress as available increases across months', () => {
+      const target = createMockTarget({
+        targetType: 'by_date',
+        targetAmount: 209500, // 2095 kr
+        targetDate: '2026-04-30',
+        createdAt: '2026-01-01T00:00:00Z',
+      });
+
+      // January: 523.75 kr available = 25% progress
+      const { container: container1 } = render(
+        <TargetProgressIndicator
+          target={target}
+          assigned={52375}
+          activity={0}
+          available={52375} // 523.75 kr
+          currentMonth="2026-01"
+        />
+      );
+      const bar1 = container1.querySelector('.h-full');
+      expect(bar1).toHaveStyle({ width: '25%' });
+
+      // February: 1047.50 kr available = 50% progress
+      const { container: container2 } = render(
+        <TargetProgressIndicator
+          target={target}
+          assigned={52375}
+          activity={0}
+          available={104750} // 1047.50 kr
+          currentMonth="2026-02"
+        />
+      );
+      const bar2 = container2.querySelector('.h-full');
+      expect(bar2).toHaveStyle({ width: '50%' });
+    });
+
+    it('should use assigned (not available) for recurring targets', () => {
+      // For monthly/yearly targets, progress is based on this month's assignment
+      const target = createMockTarget({
+        targetType: 'monthly',
+        targetAmount: 100000, // 1000 kr
+      });
+      const { container } = render(
+        <TargetProgressIndicator
+          target={target}
+          assigned={50000} // 500 kr this month
+          activity={0}
+          available={75000} // 750 kr total (different from assigned)
+          currentMonth="2026-01"
+        />
+      );
+
+      const progressBar = container.querySelector('.h-full');
+      // Should use assigned (50%), not available (75%)
+      expect(progressBar).toHaveStyle({ width: '50%' });
+    });
+  });
+
   describe('Progress Bar Color - Overspent', () => {
     it('should display red bar when spent exceeds assigned and fully funded (monthly target)', () => {
       const target = createMockTarget({ targetType: 'monthly', targetAmount: 100000 });

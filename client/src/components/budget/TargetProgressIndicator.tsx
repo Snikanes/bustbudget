@@ -21,9 +21,12 @@ function TargetProgressIndicator({
   const isOverspent = assigned >= 0 && spentAmount > assigned;
   const isUnderfunded = assigned < target.targetAmount;
 
-  // Calculate progress percentage based on assigned amount
-  // For negative assigned, show 0% progress
-  const assignedProgress = Math.min(100, Math.max(0, (assigned / target.targetAmount) * 100));
+  // Calculate progress percentage
+  // For by_date targets: use available (total cumulative progress)
+  // For recurring targets: use assigned (this month's progress)
+  const progress = target.targetType === 'by_date'
+    ? Math.min(100, Math.max(0, (available / target.targetAmount) * 100))
+    : Math.min(100, Math.max(0, (assigned / target.targetAmount) * 100));
 
   // Check if on track for by_date targets
   const isOnTrack = () => {
@@ -64,7 +67,7 @@ function TargetProgressIndicator({
   if (isUnderfunded && isOverspent) {
     const overspentAmount = spentAmount - assigned;
     const overspentProgress = Math.min(
-      100 - assignedProgress, // Cap so total doesn't exceed 100%
+      100 - progress, // Cap so total doesn't exceed 100%
       (overspentAmount / target.targetAmount) * 100
     );
 
@@ -73,7 +76,7 @@ function TargetProgressIndicator({
         {/* Assigned portion (yellow) */}
         <div
           className="h-full bg-yellow-500 transition-all duration-300"
-          style={{ width: `${assignedProgress}%` }}
+          style={{ width: `${progress}%` }}
         />
         {/* Overspent portion (red with stripes) */}
         <div
@@ -104,7 +107,7 @@ function TargetProgressIndicator({
     <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
       <div
         className={`h-full ${getBarColor()} transition-all duration-300`}
-        style={{ width: `${assignedProgress}%` }}
+        style={{ width: `${progress}%` }}
       />
     </div>
   );
