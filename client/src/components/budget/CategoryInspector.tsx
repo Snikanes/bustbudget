@@ -6,7 +6,7 @@ import { budgetKeys, useUpdateBudgetEntry, useBudget } from '@/hooks/queries/use
 import { useQueryClient } from '@tanstack/react-query';
 import CategoryTarget from './CategoryTarget';
 import { useCategoryTarget } from '@/hooks/queries/useCategoryTargets';
-import { calculateTargetAssignment } from './calculateTargetAssignment';
+import { calculateTargetAssignment } from './targetCalculations';
 
 function CategoryInspector() {
   const queryClient = useQueryClient();

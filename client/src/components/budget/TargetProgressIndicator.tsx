@@ -1,4 +1,5 @@
 import { CategoryTarget } from '@/types';
+import { isOnTrackForTarget, calculateMonthlyTargetForByDate } from './targetCalculations';
 
 interface TargetProgressIndicatorProps {
   target: CategoryTarget;
@@ -29,38 +30,7 @@ function TargetProgressIndicator({
     : Math.min(100, Math.max(0, (assigned / target.targetAmount) * 100));
 
   // Check if on track for by_date targets
-  const isOnTrack = () => {
-    if (target.targetType !== 'by_date') return false;
-
-    const currentDate = new Date(currentMonth + '-01');
-    const targetDate = new Date(target.targetDate);
-    const createdDate = new Date(target.createdAt);
-
-    // Use the first of the month for the created date
-    const createdMonth = new Date(createdDate.getFullYear(), createdDate.getMonth(), 1);
-
-    // Calculate total months from creation to target
-    const totalMonths = Math.max(
-      1,
-      (targetDate.getFullYear() - createdMonth.getFullYear()) * 12 +
-        (targetDate.getMonth() - createdMonth.getMonth()) +
-        1
-    );
-
-    // Calculate months elapsed since creation
-    const monthsElapsed = Math.max(
-      1,
-      (currentDate.getFullYear() - createdMonth.getFullYear()) * 12 +
-        (currentDate.getMonth() - createdMonth.getMonth()) +
-        1
-    );
-
-    // Calculate expected progress by now (linear progression)
-    const expectedProgress = (target.targetAmount / totalMonths) * monthsElapsed;
-
-    // On track if available >= expected progress
-    return available >= expectedProgress;
-  };
+  const isOnTrack = () => isOnTrackForTarget({ target, available, currentMonth });
 
   // Special case: Underfunded AND overspent
   // Show two-part bar: yellow for assigned, red striped for overspent
@@ -128,32 +98,7 @@ export function TargetProgressText({
   const remaining = Math.max(0, target.targetAmount - assigned);
 
   // Check if on track for by_date targets
-  const isOnTrack = () => {
-    if (target.targetType !== 'by_date') return false;
-
-    const currentDate = new Date(currentMonth + '-01');
-    const targetDate = new Date(target.targetDate);
-    const createdDate = new Date(target.createdAt);
-
-    const createdMonth = new Date(createdDate.getFullYear(), createdDate.getMonth(), 1);
-
-    const totalMonths = Math.max(
-      1,
-      (targetDate.getFullYear() - createdMonth.getFullYear()) * 12 +
-        (targetDate.getMonth() - createdMonth.getMonth()) +
-        1
-    );
-
-    const monthsElapsed = Math.max(
-      1,
-      (currentDate.getFullYear() - createdMonth.getFullYear()) * 12 +
-        (currentDate.getMonth() - createdMonth.getMonth()) +
-        1
-    );
-
-    const expectedProgress = (target.targetAmount / totalMonths) * monthsElapsed;
-    return available >= expectedProgress;
-  };
+  const isOnTrack = () => isOnTrackForTarget({ target, available, currentMonth });
 
   const formatAmount = (amount: number) => {
     const amountInKr = amount / 100;
@@ -214,26 +159,17 @@ export function TargetProgressText({
 
   // Case 4: Underfunded - assigned < target
   if (target.targetType === 'by_date') {
-    // Calculate months remaining from current month to target month
-    const currentDate = new Date(currentMonth + '-01');
-    const targetDate = new Date(target.targetDate);
-
-    const monthsRemaining = Math.max(
-      1,
-      (targetDate.getFullYear() - currentDate.getFullYear()) * 12 +
-        (targetDate.getMonth() - currentDate.getMonth()) +
-        1
-    );
-
-    // Calculate monthly amount needed (remaining / months remaining)
-    // Available includes this month's assignment, so subtract it to get starting point
-    // If assigned is negative, treat it as 0 (negative means money moved out)
-    const effectiveAssigned = Math.max(0, assigned);
-    const availableBeforeThisMonth = available - effectiveAssigned;
-    const actualRemaining = target.targetAmount - availableBeforeThisMonth;
-    const monthlyTarget = Math.ceil(actualRemaining / monthsRemaining);
+    // Use shared calculation for monthly target
+    const monthlyTarget = calculateMonthlyTargetForByDate({
+      targetAmount: target.targetAmount,
+      targetDate: target.targetDate,
+      currentMonth,
+      currentAssigned: assigned,
+      currentAvailable: available,
+    });
 
     // Calculate how much more is needed this month after what's been assigned
+    const effectiveAssigned = Math.max(0, assigned);
     const moreNeededThisMonth = Math.max(0, monthlyTarget - effectiveAssigned);
 
     // If already assigned enough this month, show as on track

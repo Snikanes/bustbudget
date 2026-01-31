@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { calculateTargetAssignment } from './calculateTargetAssignment';
+import { calculateTargetAssignment, isOnTrackForTarget, calculateMonthlyTargetForByDate } from './targetCalculations';
+import { CategoryTarget } from '@/types';
 
 describe('calculateTargetAssignment', () => {
   describe('monthly targets', () => {
@@ -193,5 +194,150 @@ describe('calculateTargetAssignment', () => {
       expect(result).toBeGreaterThan(0);
       expect(result).toBeLessThanOrEqual(209500);
     });
+  });
+});
+
+describe('isOnTrackForTarget', () => {
+  const createTarget = (overrides: Partial<CategoryTarget> = {}): CategoryTarget => ({
+    id: '1',
+    categoryId: 'cat-1',
+    targetType: 'by_date',
+    targetAmount: 100000, // 1000 kr
+    targetDate: '2026-06-15',
+    createdAt: '2026-01-15T00:00:00.000Z',
+    ...overrides,
+  });
+
+  it('should return false for non-by_date targets', () => {
+    const monthlyTarget = createTarget({ targetType: 'monthly' });
+    const result = isOnTrackForTarget({
+      target: monthlyTarget,
+      available: 50000,
+      currentMonth: '2026-03',
+    });
+    expect(result).toBe(false);
+
+    const yearlyTarget = createTarget({ targetType: 'yearly' });
+    const result2 = isOnTrackForTarget({
+      target: yearlyTarget,
+      available: 50000,
+      currentMonth: '2026-03',
+    });
+    expect(result2).toBe(false);
+  });
+
+  it('should return true when on track (linear progression)', () => {
+    // Target: 1000 kr by June (6 months: Jan-Jun)
+    // Created: January
+    // Current: March (3 months elapsed)
+    // Expected progress: 1000 / 6 * 3 = 500 kr
+    // Available: 500 kr = exactly on track
+    const target = createTarget();
+    const result = isOnTrackForTarget({
+      target,
+      available: 50000, // 500 kr
+      currentMonth: '2026-03',
+    });
+    expect(result).toBe(true);
+  });
+
+  it('should return true when ahead of schedule', () => {
+    // Same setup but with 600 kr available (ahead of 500 expected)
+    const target = createTarget();
+    const result = isOnTrackForTarget({
+      target,
+      available: 60000, // 600 kr
+      currentMonth: '2026-03',
+    });
+    expect(result).toBe(true);
+  });
+
+  it('should return false when behind schedule', () => {
+    // Same setup but with 400 kr available (behind 500 expected)
+    const target = createTarget();
+    const result = isOnTrackForTarget({
+      target,
+      available: 40000, // 400 kr
+      currentMonth: '2026-03',
+    });
+    expect(result).toBe(false);
+  });
+
+  it('should handle first month correctly', () => {
+    // Target: 1000 kr by June (6 months)
+    // Current: January (1 month elapsed)
+    // Expected: 1000 / 6 * 1 = 166.67 kr
+    const target = createTarget();
+
+    // Exactly on track
+    const result = isOnTrackForTarget({
+      target,
+      available: 16667, // ~166.67 kr
+      currentMonth: '2026-01',
+    });
+    expect(result).toBe(true);
+
+    // Slightly behind
+    const result2 = isOnTrackForTarget({
+      target,
+      available: 15000, // 150 kr
+      currentMonth: '2026-01',
+    });
+    expect(result2).toBe(false);
+  });
+
+  it('should handle last month correctly', () => {
+    // Target: 1000 kr by June
+    // Current: June (6 months elapsed)
+    // Expected: 1000 / 6 * 6 = 1000 kr (full amount)
+    const target = createTarget();
+
+    // Fully funded
+    const result = isOnTrackForTarget({
+      target,
+      available: 100000, // 1000 kr
+      currentMonth: '2026-06',
+    });
+    expect(result).toBe(true);
+
+    // Not quite there
+    const result2 = isOnTrackForTarget({
+      target,
+      available: 90000, // 900 kr
+      currentMonth: '2026-06',
+    });
+    expect(result2).toBe(false);
+  });
+});
+
+describe('calculateMonthlyTargetForByDate', () => {
+  it('should calculate correct monthly amount', () => {
+    // Target: 1000 kr by April (4 months: Jan-Apr)
+    // Current: January, no progress
+    // Monthly: 1000 / 4 = 250 kr
+    const result = calculateMonthlyTargetForByDate({
+      targetAmount: 100000,
+      targetDate: '2026-04-15',
+      currentMonth: '2026-01',
+      currentAssigned: 0,
+      currentAvailable: 0,
+    });
+    expect(result).toBe(25000); // 250 kr
+  });
+
+  it('should account for existing progress', () => {
+    // Target: 1000 kr by April
+    // Current: February (3 months remaining)
+    // Already have 250 kr from January
+    // Remaining: 1000 - 250 = 750 kr
+    // Monthly: 750 / 3 = 250 kr
+    const result = calculateMonthlyTargetForByDate({
+      targetAmount: 100000,
+      targetDate: '2026-04-15',
+      currentMonth: '2026-02',
+      currentAssigned: 0,
+      currentAvailable: 25000, // 250 kr from last month
+    });
+    expect(result).toBe(25000); // 250 kr
   });
 });
