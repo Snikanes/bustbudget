@@ -63,3 +63,38 @@ export function upsertPayee(name: string, categoryId: string | null): Payee {
     };
   }
 }
+
+export function createPayee(name: string): Payee {
+  const db = getDb();
+
+  // Check if payee already exists
+  const existing = getPayeeByName(name);
+  if (existing) {
+    return existing;
+  }
+
+  // Create new payee
+  const id = uuidv4();
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO payee (id, name, last_category_id, created_at, updated_at)
+    VALUES (?, ?, NULL, ?, ?)
+  `).run(id, name, now, now);
+
+  return {
+    id,
+    name,
+    lastCategoryId: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+export function getPayeeById(id: string): Payee | null {
+  const db = getDb();
+  const row = db.prepare(`
+    SELECT * FROM payee WHERE id = ?
+  `).get(id) as PayeeRow | undefined;
+
+  return row ? rowToPayee(row) : null;
+}

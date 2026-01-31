@@ -124,8 +124,9 @@ export interface ImportTransactionsResponse {
 export interface ImportPayeeMapping {
   id: string;
   originalPayee: string;
-  mappedPayee: string;
-  categoryId: string | null;
+  payeeId: string;
+  payeeName: string;
+  lastCategoryId: string | null;
   createdAt: string;
   updatedAt: string;
 }

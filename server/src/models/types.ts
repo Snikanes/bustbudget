@@ -77,10 +77,15 @@ export interface CategoryTargetRow {
 export interface ImportPayeeMappingRow {
   id: string;
   original_payee: string;
-  mapped_payee: string;
-  category_id: string | null;
+  payee_id: string;
   created_at: string;
   updated_at: string;
+}
+
+// Extended row type with joined payee data
+export interface ImportPayeeMappingWithPayeeRow extends ImportPayeeMappingRow {
+  payee_name: string;
+  last_category_id: string | null;
 }
 
 // API response types (camelCase, with computed fields)
@@ -174,8 +179,9 @@ export interface CategoryTarget {
 export interface ImportPayeeMapping {
   id: string;
   originalPayee: string;
-  mappedPayee: string;
-  categoryId: string | null;
+  payeeId: string;
+  payeeName: string;
+  lastCategoryId: string | null;
   createdAt: string;
   updatedAt: string;
 }

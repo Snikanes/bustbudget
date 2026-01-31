@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
 import { X } from 'lucide-react';
 import { ParsedTransaction } from '@/utils/qfxParser';
-import { Transaction } from '@/types';
+import { Transaction, Payee } from '@/types';
 import { formatNOK } from '@/utils/currency';
 import { useImportTransactions } from '@/hooks/queries/useTransactions';
 import { useImportPayeeMappings, useCreateImportPayeeMapping } from '@/hooks/queries/useImportPayeeMappings';
 import { useCategoryGroups } from '@/hooks/queries/useCategories';
+import { usePayees, useCreatePayee } from '@/hooks/queries/usePayees';
 import PayeeSelect from '@/components/shared/PayeeSelect';
 import CategorySelect from '@/components/shared/CategorySelect';
 
@@ -22,8 +23,16 @@ interface PreviewTransaction extends ParsedTransaction {
   isDuplicate: boolean;
   originalPayee: string;
   displayPayee: string;
+  displayPayeeId: string | null;
   displayCategoryId: string | null;
   isMapped: boolean;
+}
+
+// Tracks edits for an original payee
+interface PayeeEdit {
+  payeeName: string;
+  payeeId: string | null; // null means new payee (will be created on import)
+  categoryId: string | null;
 }
 
 type EditingField = { index: number; field: 'payee' | 'category' } | null;
@@ -39,10 +48,12 @@ function ImportPreviewModal({
   const importTransactions = useImportTransactions();
   const { data: payeeMappings, isLoading: mappingsLoading } = useImportPayeeMappings();
   const { data: categoryGroups } = useCategoryGroups();
+  const { data: payees = [] } = usePayees();
   const createPayeeMapping = useCreateImportPayeeMapping();
+  const createPayee = useCreatePayee();
 
-  // Track edits by originalPayee -> { payee, categoryId }
-  const [payeeEdits, setPayeeEdits] = useState<Record<string, { payee: string; categoryId: string | null }>>({});
+  // Track edits by originalPayee -> { payeeName, payeeId, categoryId }
+  const [payeeEdits, setPayeeEdits] = useState<Record<string, PayeeEdit>>({});
   const [editingField, setEditingField] = useState<EditingField>(null);
   // Track excluded transactions by index
   const [excludedIndices, setExcludedIndices] = useState<Set<number>>(new Set());
@@ -58,11 +69,25 @@ function ImportPreviewModal({
     return lookup;
   }, [categoryGroups]);
 
+  // Build a lookup for payees by name
+  const payeeLookup = useMemo(() => {
+    const lookup = new Map<string, Payee>();
+    payees.forEach((p) => {
+      lookup.set(p.name.toLowerCase(), p);
+    });
+    return lookup;
+  }, [payees]);
+
   // Build preview transactions with duplicate detection and payee/category mapping
   const previewTransactions = useMemo((): PreviewTransaction[] => {
-    const mappingLookup = new Map<string, { payee: string; categoryId: string | null }>();
+    // Build mapping lookup: originalPayee -> { payeeId, payeeName, lastCategoryId }
+    const mappingLookup = new Map<string, { payeeId: string; payeeName: string; lastCategoryId: string | null }>();
     payeeMappings?.forEach((m) => {
-      mappingLookup.set(m.originalPayee, { payee: m.mappedPayee, categoryId: m.categoryId });
+      mappingLookup.set(m.originalPayee, {
+        payeeId: m.payeeId,
+        payeeName: m.payeeName,
+        lastCategoryId: m.lastCategoryId,
+      });
     });
 
     return transactions.map((t) => {
@@ -75,8 +100,28 @@ function ImportPreviewModal({
       const edit = payeeEdits[originalPayee];
       const mapping = mappingLookup.get(originalPayee);
 
-      const displayPayee = edit?.payee ?? mapping?.payee ?? originalPayee;
-      const displayCategoryId = edit?.categoryId !== undefined ? edit.categoryId : (mapping?.categoryId ?? null);
+      let displayPayee: string;
+      let displayPayeeId: string | null;
+      let displayCategoryId: string | null;
+
+      if (edit) {
+        // User has edited this payee
+        displayPayee = edit.payeeName;
+        displayPayeeId = edit.payeeId;
+        displayCategoryId = edit.categoryId;
+      } else if (mapping) {
+        // Existing mapping from previous imports
+        displayPayee = mapping.payeeName;
+        displayPayeeId = mapping.payeeId;
+        displayCategoryId = mapping.lastCategoryId;
+      } else {
+        // No mapping - use original payee, check if it exists in payee table
+        displayPayee = originalPayee;
+        const existingPayee = payeeLookup.get(originalPayee.toLowerCase());
+        displayPayeeId = existingPayee?.id ?? null;
+        displayCategoryId = existingPayee?.lastCategoryId ?? null;
+      }
+
       const isMapped = displayPayee !== originalPayee || displayCategoryId !== null;
 
       return {
@@ -84,11 +129,12 @@ function ImportPreviewModal({
         isDuplicate,
         originalPayee,
         displayPayee,
+        displayPayeeId,
         displayCategoryId,
         isMapped,
       };
     });
-  }, [transactions, existingTransactions, payeeMappings, payeeEdits]);
+  }, [transactions, existingTransactions, payeeMappings, payeeEdits, payeeLookup]);
 
   const newTransactions = previewTransactions.filter((t, index) => !t.isDuplicate && !excludedIndices.has(index));
   const duplicateCount = previewTransactions.filter((t) => t.isDuplicate).length;
@@ -106,12 +152,18 @@ function ImportPreviewModal({
     });
   };
 
-  const handlePayeeChange = (originalPayee: string, newPayee: string) => {
+  const handlePayeeChange = (originalPayee: string, newPayeeName: string, lastCategoryId: string | null) => {
+    // Check if this payee already exists in the payee table
+    const existingPayee = payeeLookup.get(newPayeeName.toLowerCase());
+
     setPayeeEdits((prev) => ({
       ...prev,
       [originalPayee]: {
-        payee: newPayee,
-        categoryId: prev[originalPayee]?.categoryId ?? null,
+        payeeName: newPayeeName,
+        payeeId: existingPayee?.id ?? null, // null = new payee to be created
+        // Use the payee's lastCategoryId if we selected an existing payee
+        // Otherwise, preserve any manually set category or use the one passed in
+        categoryId: existingPayee ? (existingPayee.lastCategoryId ?? prev[originalPayee]?.categoryId ?? null) : (lastCategoryId ?? prev[originalPayee]?.categoryId ?? null),
       },
     }));
   };
@@ -121,12 +173,14 @@ function ImportPreviewModal({
       const existing = prev[originalPayee];
       // Get the current display payee for this original payee
       const mapping = payeeMappings?.find((m) => m.originalPayee === originalPayee);
-      const currentPayee = existing?.payee ?? mapping?.mappedPayee ?? originalPayee;
+      const currentPayeeName = existing?.payeeName ?? mapping?.payeeName ?? originalPayee;
+      const currentPayeeId = existing?.payeeId ?? mapping?.payeeId ?? payeeLookup.get(originalPayee.toLowerCase())?.id ?? null;
 
       return {
         ...prev,
         [originalPayee]: {
-          payee: currentPayee,
+          payeeName: currentPayeeName,
+          payeeId: currentPayeeId,
           categoryId,
         },
       };
@@ -139,8 +193,10 @@ function ImportPreviewModal({
   };
 
   const handleImport = async () => {
-    // Collect all mappings to save (both from edits and to update categories)
-    const mappingsToSave: Array<{ originalPayee: string; mappedPayee: string; categoryId: string | null }> = [];
+    // Collect all payee names that need to be created
+    const newPayeeNames = new Set<string>();
+    // Collect all mappings to save after payees are created
+    const mappingsToSave: Array<{ originalPayee: string; payeeName: string; payeeId: string | null }> = [];
 
     // Get unique original payees from transactions we're importing
     const originalPayees = new Set(newTransactions.map((t) => t.originalPayee));
@@ -151,18 +207,46 @@ function ImportPreviewModal({
       const edit = payeeEdits[originalPayee];
       const existingMapping = payeeMappings?.find((m) => m.originalPayee === originalPayee);
 
-      const mappedPayee = edit?.payee ?? existingMapping?.mappedPayee ?? originalPayee;
-      const categoryId = edit?.categoryId !== undefined ? edit.categoryId : (existingMapping?.categoryId ?? null);
+      let payeeName: string;
+      let payeeId: string | null;
 
-      // Only save if there's a meaningful mapping (payee changed or category set)
-      if (mappedPayee !== originalPayee || categoryId !== null) {
-        mappingsToSave.push({ originalPayee, mappedPayee, categoryId });
+      if (edit) {
+        payeeName = edit.payeeName;
+        payeeId = edit.payeeId;
+      } else if (existingMapping) {
+        payeeName = existingMapping.payeeName;
+        payeeId = existingMapping.payeeId;
+      } else {
+        payeeName = originalPayee;
+        payeeId = payeeLookup.get(originalPayee.toLowerCase())?.id ?? null;
+      }
+
+      // Only save if there's a meaningful mapping (payee changed from original)
+      if (payeeName !== originalPayee) {
+        if (payeeId === null) {
+          newPayeeNames.add(payeeName);
+        }
+        mappingsToSave.push({ originalPayee, payeeName, payeeId });
       }
     }
 
-    // Save mappings (fire and forget - don't block import)
+    // Create new payees first
+    const createdPayees = new Map<string, string>(); // name -> id
+    for (const name of newPayeeNames) {
+      try {
+        const payee = await createPayee.mutateAsync(name);
+        createdPayees.set(name, payee.id);
+      } catch (error) {
+        console.error(`Failed to create payee "${name}":`, error);
+      }
+    }
+
+    // Save mappings with resolved payee IDs
     for (const mapping of mappingsToSave) {
-      createPayeeMapping.mutate(mapping);
+      const payeeId = mapping.payeeId ?? createdPayees.get(mapping.payeeName);
+      if (payeeId) {
+        createPayeeMapping.mutate({ originalPayee: mapping.originalPayee, payeeId });
+      }
     }
 
     // Prepare transactions with mapped payees and categories
@@ -283,7 +367,7 @@ function ImportPreviewModal({
                     {editingField?.index === index && editingField?.field === 'payee' && !isSkipped ? (
                       <PayeeSelect
                         value={t.displayPayee}
-                        onChange={(name) => handlePayeeChange(t.originalPayee, name)}
+                        onChange={(name, lastCategoryId) => handlePayeeChange(t.originalPayee, name, lastCategoryId)}
                         onCancel={handleEditComplete}
                         onBlur={handleEditComplete}
                         autoFocus

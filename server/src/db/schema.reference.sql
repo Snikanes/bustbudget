@@ -173,15 +173,14 @@ BEGIN
     UPDATE category_target SET updated_at = datetime('now') WHERE id = NEW.id;
 END;
 
--- Import payee mapping table (maps payees from import files to user-preferred names and categories)
+-- Import payee mapping table (maps payees from import files to payee table)
 CREATE TABLE IF NOT EXISTS import_payee_mapping (
     id TEXT PRIMARY KEY,
     original_payee TEXT NOT NULL UNIQUE,
-    mapped_payee TEXT NOT NULL,
-    category_id TEXT,
+    payee_id TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-    FOREIGN KEY (category_id) REFERENCES category(id) ON DELETE SET NULL
+    FOREIGN KEY (payee_id) REFERENCES payee(id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_import_payee_mapping_original ON import_payee_mapping(original_payee);

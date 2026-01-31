@@ -16,8 +16,8 @@ router.get('/', asyncHandler(async (req, res) => {
 
 // POST /api/import-payee-mappings
 router.post('/', asyncHandler(async (req, res) => {
-  const { originalPayee, mappedPayee, categoryId } = req.body as { originalPayee: string; mappedPayee: string; categoryId?: string | null };
-  const mapping = importPayeeMappingService.upsertMapping(originalPayee, mappedPayee, categoryId ?? null);
+  const { originalPayee, payeeId } = req.body as { originalPayee: string; payeeId: string };
+  const mapping = importPayeeMappingService.upsertMapping(originalPayee, payeeId);
   res.status(201).json({ mapping });
 }));
 

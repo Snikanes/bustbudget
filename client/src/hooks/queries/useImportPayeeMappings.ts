@@ -20,7 +20,7 @@ export function useCreateImportPayeeMapping() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (data: { originalPayee: string; mappedPayee: string; categoryId?: string | null }) =>
+    mutationFn: (data: { originalPayee: string; payeeId: string }) =>
       api
         .post<{ mapping: ImportPayeeMapping }>('/api/import-payee-mappings', data)
         .then((r) => r.mapping),

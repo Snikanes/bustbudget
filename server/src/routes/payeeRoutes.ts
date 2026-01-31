@@ -15,4 +15,11 @@ router.get('/', asyncHandler(async (req, res) => {
   res.json({ payees });
 }));
 
+// POST /api/payees
+router.post('/', asyncHandler(async (req, res) => {
+  const { name } = req.body as { name: string };
+  const payee = payeeService.createPayee(name);
+  res.status(201).json({ payee });
+}));
+
 export default router;
