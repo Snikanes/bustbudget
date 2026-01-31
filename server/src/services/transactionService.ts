@@ -18,6 +18,7 @@ interface TransactionWithJoins extends TransactionRow {
 }
 
 function rowToTransaction(row: TransactionWithJoins): Transaction {
+  // is_cleared: 0 = uncleared, 1 = cleared, 2 = reconciled
   return {
     id: row.id,
     accountId: row.account_id,
@@ -30,7 +31,8 @@ function rowToTransaction(row: TransactionWithJoins): Transaction {
     amount: row.amount,
     payee: row.payee,
     memo: row.memo,
-    isCleared: row.is_cleared === 1,
+    isCleared: row.is_cleared >= 1,
+    isReconciled: row.is_cleared === 2,
     isStartingBalance: row.is_starting_balance === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -140,12 +142,30 @@ export function updateTransaction(id: string, data: UpdateTransactionRequest): T
     throw new NotFoundError('Transaction', id);
   }
 
-  const isCleared = existing.is_cleared === 1;
+  // is_cleared: 0 = uncleared, 1 = cleared, 2 = reconciled
+  const isCleared = existing.is_cleared >= 1;
+  const isReconciled = existing.is_cleared === 2;
   const isStartingBalance = existing.is_starting_balance === 1;
 
   // Check editability rules
-  if (isCleared) {
-    // Cleared transactions: only memo can be edited
+  if (isReconciled) {
+    // Reconciled transactions: only memo can be edited (cannot un-reconcile)
+    const attemptedFields: string[] = [];
+    if (data.date !== undefined) attemptedFields.push('date');
+    if (data.amount !== undefined) attemptedFields.push('amount');
+    if (data.payee !== undefined) attemptedFields.push('payee');
+    if (data.categoryId !== undefined) attemptedFields.push('categoryId');
+    if (data.isCleared !== undefined) attemptedFields.push('isCleared');
+
+    if (attemptedFields.length > 0) {
+      throw new BusinessRuleError(
+        'RECONCILED_TRANSACTION_IMMUTABLE',
+        'Reconciled transactions can only have memo updated',
+        { transactionId: id, attemptedFields, allowedFields: ['memo'] }
+      );
+    }
+  } else if (isCleared) {
+    // Cleared transactions: only memo and isCleared can be edited
     const attemptedFields: string[] = [];
     if (data.date !== undefined) attemptedFields.push('date');
     if (data.amount !== undefined) attemptedFields.push('amount');
@@ -354,4 +374,23 @@ export function importTransactions(
     skipped,
     transactions: importedTransactions,
   };
+}
+
+export function reconcileAccount(accountId: string): { reconciledCount: number } {
+  const db = getDb();
+
+  // Validate account exists
+  const account = db.prepare('SELECT id FROM account WHERE id = ?').get(accountId);
+  if (!account) {
+    throw new NotFoundError('Account', accountId);
+  }
+
+  // Update all cleared transactions (is_cleared = 1) to reconciled (is_cleared = 2)
+  const result = db.prepare(`
+    UPDATE "transaction"
+    SET is_cleared = 2
+    WHERE account_id = ? AND is_cleared = 1
+  `).run(accountId);
+
+  return { reconciledCount: result.changes };
 }

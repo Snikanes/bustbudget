@@ -131,6 +131,7 @@ export interface Transaction {
   payee: string | null;
   memo: string | null;
   isCleared: boolean;
+  isReconciled: boolean;
   isStartingBalance: boolean;
   createdAt: string;
   updatedAt: string;

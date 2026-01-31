@@ -143,3 +143,18 @@ export function useImportTransactions() {
     },
   });
 }
+
+export function useReconcileAccount() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (accountId: string) =>
+      api.post<{ reconciledCount: number }>(`/api/accounts/${accountId}/reconcile`, {}),
+    onSuccess: (_, accountId) => {
+      queryClient.invalidateQueries({
+        queryKey: transactionKeys.byAccount(accountId),
+      });
+      queryClient.invalidateQueries({ queryKey: accountKeys.all });
+    },
+  });
+}

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Check, Circle, Trash2 } from 'lucide-react';
+import { Check, Circle, Trash2, Lock } from 'lucide-react';
 import { Transaction } from '@/types';
 import { formatNOK } from '@/utils/currency';
 import { useUpdateTransaction, useDeleteTransaction, useCreateTransfer } from '@/hooks/queries/useTransactions';
@@ -26,15 +26,19 @@ function TransactionRow({ transaction, currentAccountId }: TransactionRowProps) 
   const createTransfer = useCreateTransfer();
 
   const isCleared = transaction.isCleared;
+  const isReconciled = transaction.isReconciled;
   const isTransfer = transaction.transferId !== null;
   const isStartingBalance = transaction.isStartingBalance;
 
   // Field-level editability
+  // Reconciled: only memo editable, cannot toggle cleared
+  // Cleared: only memo and isCleared editable
   const canEditDate = !isCleared;
   const canEditPayee = !isCleared;
   const canEditCategory = !isCleared && !isTransfer;
   const canEditAmount = !isCleared; // Allow editing for all uncleared transactions
   const canEditMemo = true; // Always editable
+  const canToggleCleared = !isReconciled; // Cannot un-reconcile
 
   // Handle click outside to deselect
   useEffect(() => {
@@ -320,19 +324,29 @@ function TransactionRow({ transaction, currentAccountId }: TransactionRowProps) 
         )}
       </div>
 
-      {/* Cleared */}
+      {/* Cleared/Reconciled */}
       <div className="flex items-center justify-center">
-        <button
-          onClick={handleClearedToggle}
-          className={`w-5 h-5 rounded-full flex items-center justify-center transition-colors ${
-            isCleared
-              ? 'bg-green-500 text-white'
-              : 'border border-gray-300 text-gray-300 hover:border-gray-400'
-          }`}
-          title={isCleared ? 'Cleared' : 'Uncleared'}
-        >
-          {isCleared ? <Check className="w-3 h-3" /> : <Circle className="w-3 h-3" />}
-        </button>
+        {isReconciled ? (
+          <div
+            className="w-5 h-5 rounded-full flex items-center justify-center bg-blue-500 text-white"
+            title="Reconciled"
+          >
+            <Lock className="w-3 h-3" />
+          </div>
+        ) : (
+          <button
+            onClick={handleClearedToggle}
+            disabled={!canToggleCleared}
+            className={`w-5 h-5 rounded-full flex items-center justify-center transition-colors ${
+              isCleared
+                ? 'bg-green-500 text-white'
+                : 'border border-gray-300 text-gray-300 hover:border-gray-400'
+            }`}
+            title={isCleared ? 'Cleared' : 'Uncleared'}
+          >
+            {isCleared ? <Check className="w-3 h-3" /> : <Circle className="w-3 h-3" />}
+          </button>
+        )}
       </div>
 
       {/* Delete button - only visible when selected */}

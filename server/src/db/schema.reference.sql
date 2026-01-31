@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS transfer (
 );
 
 -- Transaction table
+-- is_cleared: 0 = uncleared, 1 = cleared, 2 = reconciled
 CREATE TABLE IF NOT EXISTS "transaction" (
     id TEXT PRIMARY KEY,
     account_id TEXT NOT NULL,

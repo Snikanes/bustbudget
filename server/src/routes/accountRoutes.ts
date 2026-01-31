@@ -76,4 +76,10 @@ router.post('/:id/import', asyncHandler(async (req, res) => {
   res.status(201).json(result);
 }));
 
+// POST /api/accounts/:id/reconcile
+router.post('/:id/reconcile', asyncHandler(async (req, res) => {
+  const result = transactionService.reconcileAccount(req.params.id);
+  res.json(result);
+}));
+
 export default router;

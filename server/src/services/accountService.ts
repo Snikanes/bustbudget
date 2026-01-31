@@ -23,11 +23,13 @@ function rowToAccount(row: AccountRow & { balance?: number; cleared_balance?: nu
 
 export function getAllAccounts(): Account[] {
   const db = getDb();
+  // is_cleared: 0 = uncleared, 1 = cleared, 2 = reconciled
+  // Cleared balance includes both cleared and reconciled transactions
   const rows = db.prepare(`
     SELECT
       a.*,
       COALESCE(SUM(t.amount), 0) as balance,
-      COALESCE(SUM(CASE WHEN t.is_cleared = 1 THEN t.amount ELSE 0 END), 0) as cleared_balance,
+      COALESCE(SUM(CASE WHEN t.is_cleared >= 1 THEN t.amount ELSE 0 END), 0) as cleared_balance,
       COALESCE(SUM(CASE WHEN t.is_cleared = 0 THEN t.amount ELSE 0 END), 0) as uncleared_balance
     FROM account a
     LEFT JOIN "transaction" t ON t.account_id = a.id
@@ -41,11 +43,13 @@ export function getAllAccounts(): Account[] {
 
 export function getAccountById(id: string): Account {
   const db = getDb();
+  // is_cleared: 0 = uncleared, 1 = cleared, 2 = reconciled
+  // Cleared balance includes both cleared and reconciled transactions
   const row = db.prepare(`
     SELECT
       a.*,
       COALESCE(SUM(t.amount), 0) as balance,
-      COALESCE(SUM(CASE WHEN t.is_cleared = 1 THEN t.amount ELSE 0 END), 0) as cleared_balance,
+      COALESCE(SUM(CASE WHEN t.is_cleared >= 1 THEN t.amount ELSE 0 END), 0) as cleared_balance,
       COALESCE(SUM(CASE WHEN t.is_cleared = 0 THEN t.amount ELSE 0 END), 0) as uncleared_balance
     FROM account a
     LEFT JOIN "transaction" t ON t.account_id = a.id
