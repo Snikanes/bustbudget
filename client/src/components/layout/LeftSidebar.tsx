@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Wallet, PiggyBank } from 'lucide-react';
+import { Wallet, PiggyBank, Users } from 'lucide-react';
 import AccountList from '../accounts/AccountList';
+import ManagePayeesModal from '../payees/ManagePayeesModal';
 
 const MIN_WIDTH = 200;
 const MAX_WIDTH = 500;
@@ -15,6 +16,7 @@ function LeftSidebar() {
     return stored ? parseInt(stored, 10) : DEFAULT_WIDTH;
   });
   const [isResizing, setIsResizing] = useState(false);
+  const [showManagePayees, setShowManagePayees] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -79,6 +81,22 @@ function LeftSidebar() {
       <div className="flex-1 overflow-auto">
         <AccountList />
       </div>
+
+      {/* Manage Payees Button */}
+      <div className="p-2 border-t border-slate-700">
+        <button
+          onClick={() => setShowManagePayees(true)}
+          className="flex items-center gap-2 w-full px-3 py-2 text-slate-300 hover:bg-slate-700 rounded-lg transition-colors"
+        >
+          <Users className="w-5 h-5" />
+          Manage payees
+        </button>
+      </div>
+
+      {/* Manage Payees Modal */}
+      {showManagePayees && (
+        <ManagePayeesModal onClose={() => setShowManagePayees(false)} />
+      )}
 
       {/* Resize Handle */}
       <div

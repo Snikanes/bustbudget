@@ -307,3 +307,22 @@ export interface UpdateCategoryTargetRequest {
   targetDate?: string;
   recurrenceDay?: number | null;
 }
+
+export interface RenamingRule {
+  id: string;
+  originalPayee: string;
+}
+
+export interface PayeeWithDetails {
+  id: string;
+  name: string;
+  lastCategoryId: string | null;
+  transactionCount: number;
+  renamingRules: RenamingRule[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UpdatePayeeRequest {
+  name: string;
+}

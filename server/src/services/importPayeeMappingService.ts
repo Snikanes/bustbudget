@@ -68,3 +68,18 @@ export function deleteMapping(id: string): void {
   const db = getDb();
   db.prepare('DELETE FROM import_payee_mapping WHERE id = ?').run(id);
 }
+
+export function getMappingsByPayeeId(payeeId: string): { id: string; originalPayee: string }[] {
+  const db = getDb();
+  const rows = db.prepare(`
+    SELECT id, original_payee
+    FROM import_payee_mapping
+    WHERE payee_id = ?
+    ORDER BY original_payee
+  `).all(payeeId) as { id: string; original_payee: string }[];
+
+  return rows.map(row => ({
+    id: row.id,
+    originalPayee: row.original_payee,
+  }));
+}
