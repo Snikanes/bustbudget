@@ -48,8 +48,10 @@ ynab-clone/
 │
 ├── server/                # Backend Express application
 │   ├── data/             # SQLite database file
+│   ├── scripts/          # Utility scripts (backup restore, etc)
 │   ├── src/
-│   │   ├── db/           # Database initialization and schema
+│   │   ├── db/           # Database initialization and migrations
+│   │   │   └── migrations/  # Sequelize migration files
 │   │   ├── middleware/   # Express middleware (error handling)
 │   │   ├── models/       # TypeScript type definitions
 │   │   ├── routes/       # API route handlers
@@ -220,11 +222,12 @@ npm run dev  # Starts both frontend and backend
 
 ### Making Changes
 
-1. **Database changes:**
+1. **Database schema changes:**
    - **IMPORTANT:** Always run `./scripts/backup-db.sh` before making schema changes
-   - Update `server/src/db/schema.sql`
-   - Delete database file to recreate: `rm server/data/budget.db`
-   - Or write migration script
+   - Create a new migration: `cd server && npx sequelize-cli migration:generate --name describe-change`
+   - Edit the generated file in `server/src/db/migrations/`
+   - Migrations run automatically on app startup
+   - Reference schema: `server/src/db/schema.reference.sql`
 
 2. **New API endpoint:**
    - Add route in `server/src/routes/`
@@ -265,7 +268,8 @@ npm run dev  # Starts both frontend and backend
 
 ### Configuration
 - `client/src/api/client.ts` - API wrapper with error handling
-- `server/src/db/index.ts` - Database initialization
+- `server/src/db/index.ts` - Database initialization and migration runner
+- `server/src/db/migrations/` - Sequelize migrations (run on startup)
 - `server/src/middleware/errorHandler.ts` - Error handling middleware
 
 ### Key Components
@@ -312,12 +316,13 @@ new Intl.NumberFormat('nb-NO', {
 ## Common Tasks
 
 ### Add a new field to category
-1. Update `server/src/db/schema.sql`
-2. Update `CategoryRow` in `server/src/models/types.ts`
-3. Update `Category` interface (camelCase version)
-4. Update transformation in service layer
-5. Update `client/src/types/index.ts`
-6. Recreate database or add migration
+1. Create migration: `cd server && npx sequelize-cli migration:generate --name add-field-to-category`
+2. Edit migration to add column with `ALTER TABLE`
+3. Update `CategoryRow` in `server/src/models/types.ts`
+4. Update `Category` interface (camelCase version)
+5. Update transformation in service layer
+6. Update `client/src/types/index.ts`
+7. Restart server (migrations run automatically)
 
 ### Add a new API endpoint
 1. Create route handler in appropriate routes file
@@ -341,14 +346,9 @@ new Intl.NumberFormat('nb-NO', {
 - Test error cases (validation, not found, etc)
 - Check localStorage persistence across refreshes
 
-## Next Steps (See TODO.md)
+## Next Steps
 
-Priority improvements tracked in TODO.md:
-1. Resizable right sidebar
-2. Target progress indicators
-3. Enhanced target display
-4. Keyboard shortcuts
-5. Export/import functionality
+See `TODO.md` for planned improvements and features.
 
 ## Tips for Working on This Project
 
@@ -367,11 +367,20 @@ Priority improvements tracked in TODO.md:
 # Backup database (ALWAYS do this before schema changes)
 ./scripts/backup-db.sh
 
+# Restore data from backup
+cd server && npx tsx scripts/restore-from-backup.ts <backup-file-path>
+
 # View database schema
 sqlite3 server/data/budget.db ".schema"
 
 # Query data
 sqlite3 server/data/budget.db "SELECT * FROM category_target;"
+
+# Check migration status
+sqlite3 server/data/budget.db "SELECT * FROM SequelizeMeta;"
+
+# Create a new migration
+cd server && npx sequelize-cli migration:generate --name describe-change
 
 # Reset database (WARNING: deletes all data)
 rm server/data/budget.db && npm run dev
@@ -409,5 +418,5 @@ lsof -i :5174  # Frontend
 
 ---
 
-**Last Updated:** January 30, 2026
+**Last Updated:** January 31, 2026
 **Current Version:** Active development, feature-complete for basic budgeting
