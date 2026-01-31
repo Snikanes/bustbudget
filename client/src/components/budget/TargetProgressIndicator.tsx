@@ -108,11 +108,6 @@ export function TargetProgressText({
     });
   };
 
-  const getDayWithSuffix = (date: Date) => {
-    const day = date.getDate();
-    return `${day}.`;
-  };
-
   // Case 1: Overspent - spent more than assigned amount
   if (isOverspent) {
     return (

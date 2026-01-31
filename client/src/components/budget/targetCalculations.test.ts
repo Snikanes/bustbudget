@@ -204,7 +204,9 @@ describe('isOnTrackForTarget', () => {
     targetType: 'by_date',
     targetAmount: 100000, // 1000 kr
     targetDate: '2026-06-15',
+    recurrenceDay: null,
     createdAt: '2026-01-15T00:00:00.000Z',
+    updatedAt: '2026-01-15T00:00:00.000Z',
     ...overrides,
   });
 
