@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Plus } from 'lucide-react';
 import { BudgetMonth } from '@/types';
-import CategoryGroupRow from './CategoryGroupRow';
 import CategoryRow from './CategoryRow';
 import AddCategoryModal from './AddCategoryModal';
 
@@ -12,6 +11,12 @@ interface BudgetTableProps {
 
 function BudgetTable({ budget, month }: BudgetTableProps) {
   const [showModal, setShowModal] = useState(false);
+
+  // Flatten all categories from groups and ungrouped into a single list
+  const allCategories = [
+    ...budget.groups.flatMap((group) => group.categories),
+    ...budget.ungroupedCategories,
+  ].sort((a, b) => a.categoryName.localeCompare(b.categoryName));
 
   return (
     <div className="bg-white rounded-lg shadow">
@@ -32,30 +37,17 @@ function BudgetTable({ budget, month }: BudgetTableProps) {
         <div className="text-right">Available</div>
       </div>
 
-      {/* Groups */}
-      {budget.groups.map((group) => (
-        <CategoryGroupRow
-          key={group.id}
-          group={group}
+      {/* Categories */}
+      {allCategories.map((category) => (
+        <CategoryRow
+          key={category.categoryId}
+          category={category}
           month={month}
         />
       ))}
 
-      {/* Ungrouped categories */}
-      {budget.ungroupedCategories.length > 0 && (
-        <div className="border-t border-gray-200">
-          {budget.ungroupedCategories.map((category) => (
-            <CategoryRow
-              key={category.categoryId}
-              category={category}
-              month={month}
-            />
-          ))}
-        </div>
-      )}
-
       {/* Empty state */}
-      {budget.groups.length === 0 && budget.ungroupedCategories.length === 0 && (
+      {allCategories.length === 0 && (
         <div className="px-4 py-8 text-center text-gray-500">
           <p>No categories yet.</p>
           <button

@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { X, Trash2, Edit2, FolderInput, DollarSign } from 'lucide-react';
+import { X, Trash2, Edit2, DollarSign } from 'lucide-react';
 import { useUIStore } from '@/stores/uiStore';
-import { useUpdateCategory, useDeleteCategory, useCategoryGroups } from '@/hooks/queries/useCategories';
+import { useUpdateCategory, useDeleteCategory } from '@/hooks/queries/useCategories';
 import { budgetKeys, useUpdateBudgetEntry, useBudget } from '@/hooks/queries/useBudget';
 import { useQueryClient } from '@tanstack/react-query';
 import CategoryTarget from './CategoryTarget';
@@ -16,10 +16,7 @@ function CategoryInspector() {
 
   const [isRenaming, setIsRenaming] = useState(false);
   const [newName, setNewName] = useState('');
-  const [isMoving, setIsMoving] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-
-  const { data: categoryGroups } = useCategoryGroups();
   const { data: budgetData } = useBudget(selectedMonth);
   const updateCategory = useUpdateCategory();
   const deleteCategory = useDeleteCategory();
@@ -31,14 +28,12 @@ function CategoryInspector() {
   const handleClose = () => {
     setSelectedCategory(null);
     setIsRenaming(false);
-    setIsMoving(false);
     setShowDeleteConfirm(false);
   };
 
   const handleStartRename = () => {
     setNewName(selectedCategory.name);
     setIsRenaming(true);
-    setIsMoving(false);
     setShowDeleteConfirm(false);
   };
 
@@ -60,28 +55,6 @@ function CategoryInspector() {
     } else {
       setIsRenaming(false);
     }
-  };
-
-  const handleStartMove = () => {
-    setIsMoving(true);
-    setIsRenaming(false);
-    setShowDeleteConfirm(false);
-  };
-
-  const handleMove = (groupId: string | null) => {
-    updateCategory.mutate(
-      { id: selectedCategory.id, groupId },
-      {
-        onSuccess: () => {
-          setSelectedCategory({
-            ...selectedCategory,
-            groupId,
-          });
-          setIsMoving(false);
-          queryClient.invalidateQueries({ queryKey: budgetKeys.month(selectedMonth) });
-        },
-      }
-    );
   };
 
   const handleDelete = () => {
@@ -193,48 +166,6 @@ function CategoryInspector() {
           </button>
         )}
 
-        {/* Move */}
-        {isMoving ? (
-          <div className="space-y-2">
-            <div className="text-sm text-gray-600 mb-1">Move to group:</div>
-            <div className="max-h-48 overflow-auto border border-gray-200 rounded">
-              <button
-                onClick={() => handleMove(null)}
-                className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 ${
-                  selectedCategory.groupId === null ? 'bg-blue-50 text-blue-700' : ''
-                }`}
-              >
-                (No group)
-              </button>
-              {categoryGroups?.map((group) => (
-                <button
-                  key={group.id}
-                  onClick={() => handleMove(group.id)}
-                  className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 border-t border-gray-100 ${
-                    selectedCategory.groupId === group.id ? 'bg-blue-50 text-blue-700' : ''
-                  }`}
-                >
-                  {group.name}
-                </button>
-              ))}
-            </div>
-            <button
-              onClick={() => setIsMoving(false)}
-              className="w-full px-3 py-1.5 border border-gray-300 text-sm rounded hover:bg-gray-50"
-            >
-              Cancel
-            </button>
-          </div>
-        ) : (
-          <button
-            onClick={handleStartMove}
-            className="w-full flex items-center gap-3 px-3 py-2 text-left text-gray-700 hover:bg-gray-100 rounded transition-colors"
-          >
-            <FolderInput className="w-4 h-4" />
-            <span>Move to Group</span>
-          </button>
-        )}
-
         {/* Delete */}
         {showDeleteConfirm ? (
           <div className="space-y-2 p-3 bg-red-50 rounded border border-red-200">
@@ -262,7 +193,6 @@ function CategoryInspector() {
             onClick={() => {
               setShowDeleteConfirm(true);
               setIsRenaming(false);
-              setIsMoving(false);
             }}
             className="w-full flex items-center gap-3 px-3 py-2 text-left text-red-600 hover:bg-red-50 rounded transition-colors"
           >

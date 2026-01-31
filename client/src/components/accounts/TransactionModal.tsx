@@ -1,7 +1,7 @@
 import { useState, FormEvent } from 'react';
 import { X } from 'lucide-react';
 import { useCreateTransaction, useCreateTransfer } from '@/hooks/queries/useTransactions';
-import { useCategoryGroups } from '@/hooks/queries/useCategories';
+import { useCategories } from '@/hooks/queries/useCategories';
 import { useAccounts } from '@/hooks/queries/useAccounts';
 import PayeeSelect from '@/components/shared/PayeeSelect';
 
@@ -21,8 +21,11 @@ function TransactionModal({ accountId, onClose }: TransactionModalProps) {
 
   const createTransaction = useCreateTransaction();
   const createTransfer = useCreateTransfer();
-  const { data: categoryGroups } = useCategoryGroups();
+  const { data: categories } = useCategories();
   const { data: accounts } = useAccounts();
+
+  // Sort categories alphabetically
+  const sortedCategories = categories?.slice().sort((a, b) => a.name.localeCompare(b.name)) || [];
 
   // Filter accounts for transfer options
   const transferAccounts = accounts
@@ -159,18 +162,14 @@ function TransactionModal({ accountId, onClose }: TransactionModalProps) {
             <select
               value={categoryId}
               onChange={(e) => handleCategoryChange(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
             >
               <option value="">Select category...</option>
 
-              {categoryGroups?.map((group) => (
-                <optgroup key={group.id} label={group.name}>
-                  {group.categories.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.name}
-                    </option>
-                  ))}
-                </optgroup>
+              {sortedCategories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
               ))}
 
               {transferAccounts.length > 0 && (

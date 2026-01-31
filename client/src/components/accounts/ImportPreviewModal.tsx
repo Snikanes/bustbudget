@@ -5,7 +5,7 @@ import { Transaction, Payee } from '@/types';
 import { formatNOK } from '@/utils/currency';
 import { useImportTransactions } from '@/hooks/queries/useTransactions';
 import { useImportPayeeMappings, useCreateImportPayeeMapping } from '@/hooks/queries/useImportPayeeMappings';
-import { useCategoryGroups } from '@/hooks/queries/useCategories';
+import { useCategories } from '@/hooks/queries/useCategories';
 import { usePayees, useCreatePayee } from '@/hooks/queries/usePayees';
 import PayeeSelect from '@/components/shared/PayeeSelect';
 import CategorySelect from '@/components/shared/CategorySelect';
@@ -47,7 +47,7 @@ function ImportPreviewModal({
 }: ImportPreviewModalProps) {
   const importTransactions = useImportTransactions();
   const { data: payeeMappings, isLoading: mappingsLoading } = useImportPayeeMappings();
-  const { data: categoryGroups } = useCategoryGroups();
+  const { data: categories } = useCategories();
   const { data: payees = [] } = usePayees();
   const createPayeeMapping = useCreateImportPayeeMapping();
   const createPayee = useCreatePayee();
@@ -61,13 +61,11 @@ function ImportPreviewModal({
   // Build a lookup for category names
   const categoryNameLookup = useMemo(() => {
     const lookup = new Map<string, string>();
-    categoryGroups?.forEach((group) => {
-      group.categories.forEach((cat) => {
-        lookup.set(cat.id, cat.name);
-      });
+    categories?.forEach((cat) => {
+      lookup.set(cat.id, cat.name);
     });
     return lookup;
-  }, [categoryGroups]);
+  }, [categories]);
 
   // Build a lookup for payees by name
   const payeeLookup = useMemo(() => {

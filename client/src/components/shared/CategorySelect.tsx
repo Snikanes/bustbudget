@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, KeyboardEvent } from 'react';
-import { useCategoryGroups } from '@/hooks/queries/useCategories';
+import { useCategories } from '@/hooks/queries/useCategories';
 import { useAccounts } from '@/hooks/queries/useAccounts';
 
 interface CategorySelectProps {
@@ -25,8 +25,11 @@ function CategorySelect({
 }: CategorySelectProps) {
   const [inputValue, setInputValue] = useState(value || '');
   const selectRef = useRef<HTMLSelectElement>(null);
-  const { data: categoryGroups } = useCategoryGroups();
+  const { data: categories } = useCategories();
   const { data: accounts } = useAccounts();
+
+  // Sort categories alphabetically
+  const sortedCategories = categories?.slice().sort((a, b) => a.name.localeCompare(b.name)) || [];
 
   // Filter accounts for transfer options
   const transferAccounts = accounts
@@ -76,14 +79,10 @@ function CategorySelect({
       <option value="">Select category...</option>
       {allowNull && <option value="__null__">Clear category</option>}
 
-      {categoryGroups?.map((group) => (
-        <optgroup key={group.id} label={group.name}>
-          {group.categories.map((category) => (
-            <option key={category.id} value={category.id}>
-              {category.name}
-            </option>
-          ))}
-        </optgroup>
+      {sortedCategories.map((category) => (
+        <option key={category.id} value={category.id}>
+          {category.name}
+        </option>
       ))}
 
       {transferAccounts.length > 0 && (
