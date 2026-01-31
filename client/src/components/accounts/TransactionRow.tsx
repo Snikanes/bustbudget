@@ -183,7 +183,7 @@ function TransactionRow({ transaction, currentAccountId }: TransactionRowProps) 
             }}
             className={`block ${canEditDate ? 'cursor-pointer hover:bg-blue-50 px-1 -mx-1 rounded' : ''}`}
           >
-            {new Date(transaction.date).toLocaleDateString('nb-NO')}
+            {new Date(transaction.date).toLocaleDateString('nb-NO', { day: '2-digit', month: '2-digit', year: 'numeric' })}
           </span>
         )}
       </div>
