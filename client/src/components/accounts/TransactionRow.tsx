@@ -7,6 +7,7 @@ import DateInput from '@/components/shared/DateInput';
 import CategorySelect from '@/components/shared/CategorySelect';
 import CurrencyInput from '@/components/shared/CurrencyInput';
 import TextInput from '@/components/shared/TextInput';
+import PayeeSelect from '@/components/shared/PayeeSelect';
 
 interface TransactionRowProps {
   transaction: Transaction;
@@ -18,6 +19,7 @@ type EditingField = 'date' | 'payee' | 'category' | 'outflow' | 'inflow' | 'memo
 function TransactionRow({ transaction, currentAccountId }: TransactionRowProps) {
   const [editingField, setEditingField] = useState<EditingField>(null);
   const [isSelected, setIsSelected] = useState(false);
+  const [tempPayee, setTempPayee] = useState('');
   const rowRef = useRef<HTMLDivElement>(null);
   const updateTransaction = useUpdateTransaction();
   const deleteTransaction = useDeleteTransaction();
@@ -183,23 +185,30 @@ function TransactionRow({ transaction, currentAccountId }: TransactionRowProps) 
       </div>
 
       {/* Payee */}
-      <div className="text-sm truncate">
+      <div className={`text-sm ${editingField === 'payee' ? '' : 'truncate'}`}>
         {editingField === 'payee' ? (
-          <TextInput
-            value={transaction.payee || ''}
-            onChange={(value) => {
-              updateTransaction.mutate({ id: transaction.id, payee: value || null });
-              setEditingField(null);
+          <PayeeSelect
+            value={tempPayee}
+            onChange={(name) => {
+              setTempPayee(name);
             }}
             onCancel={() => setEditingField(null)}
+            onBlur={() => {
+              updateTransaction.mutate({ id: transaction.id, payee: tempPayee || undefined });
+              setEditingField(null);
+            }}
             autoFocus
             className="text-sm"
+            placeholder="Payee"
           />
         ) : (
           <span
             onClick={(e) => {
               e.stopPropagation();
-              if (canEditPayee) setEditingField('payee');
+              if (canEditPayee) {
+                setTempPayee(transaction.payee || '');
+                setEditingField('payee');
+              }
             }}
             className={`truncate block ${canEditPayee ? 'cursor-pointer hover:bg-blue-50 px-1 -mx-1 rounded' : ''}`}
           >
@@ -241,7 +250,7 @@ function TransactionRow({ transaction, currentAccountId }: TransactionRowProps) 
           <TextInput
             value={transaction.memo || ''}
             onChange={(value) => {
-              updateTransaction.mutate({ id: transaction.id, memo: value || null });
+              updateTransaction.mutate({ id: transaction.id, memo: value || undefined });
               setEditingField(null);
             }}
             onCancel={() => setEditingField(null)}
