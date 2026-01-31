@@ -35,10 +35,12 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-      <div className="bg-gray-800 p-8 rounded-lg shadow-lg max-w-md w-full mx-4">
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center">
+      <div className="bg-gray-800/80 backdrop-blur-sm p-8 rounded-2xl shadow-2xl max-w-md w-full mx-4 border border-gray-700">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">Budget App</h1>
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent mb-2">
+            Budgetbyte
+          </h1>
           <p className="text-gray-400">Sign in to manage your budget</p>
         </div>
 

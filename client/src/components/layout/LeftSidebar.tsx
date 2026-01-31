@@ -65,7 +65,7 @@ function LeftSidebar() {
       <div className="p-4 border-b border-slate-700">
         <h1 className="text-xl font-bold flex items-center gap-2">
           <PiggyBank className="w-6 h-6" />
-          Budget
+          Budgetbyte
         </h1>
       </div>
 
