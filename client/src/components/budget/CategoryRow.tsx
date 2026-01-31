@@ -53,6 +53,8 @@ function CategoryRow({ category, month }: CategoryRowProps) {
             {category.target && (
               <TargetProgressText
                 target={category.target}
+                assigned={category.assigned}
+                activity={category.activity}
                 available={category.available}
                 currentMonth={month}
               />
@@ -62,6 +64,8 @@ function CategoryRow({ category, month }: CategoryRowProps) {
           {category.target && (
             <TargetProgressIndicator
               target={category.target}
+              assigned={category.assigned}
+              activity={category.activity}
               available={category.available}
               currentMonth={month}
             />
