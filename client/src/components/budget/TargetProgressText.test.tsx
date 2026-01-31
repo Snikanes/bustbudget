@@ -277,28 +277,66 @@ describe('TargetProgressText', () => {
   });
 
   describe('By Date Underfunded', () => {
-    it('should display "X more needed by the D." when by_date target is behind', () => {
+    it('should display "X needed this month" showing monthly amount for by_date target', () => {
+      // Target: 2095.00 kr by March 15th
+      // Current: January (3 months remaining: Jan, Feb, Mar)
+      // Available: 0 kr
+      // Remaining: 2095.00 kr
+      // Monthly needed: 2095.00 / 3 = 698.34 kr (rounded up)
+      const target = createMockTarget({
+        targetType: 'by_date',
+        targetAmount: 209500, // 2095.00 kr
+        targetDate: '2026-03-15',
+        createdAt: '2025-12-01T00:00:00Z',
+      });
+
+      render(
+        <TargetProgressText
+          target={target}
+          assigned={0}
+          activity={0}
+          available={0}
+          currentMonth="2026-01"
+        />
+      );
+
+      // Should show monthly amount, not total
+      // 209500 / 3 = 69833.33... → rounds up to 69834 cents = 698.34 kr
+      expect(screen.getByText(/698,34 needed this month/)).toBeInTheDocument();
+    });
+
+    it('should calculate monthly amount correctly for by_date target with 1 month remaining', () => {
+      // Target: 1000 kr by Feb 28, current month is Feb
+      // Available: 500 kr
+      // Remaining: 500 kr
+      // Months remaining: 1
+      // Monthly: 500 / 1 = 500 kr
       const target = createMockTarget({
         targetType: 'by_date',
         targetAmount: 100000,
-        targetDate: '2026-06-15',
+        targetDate: '2026-02-28',
         createdAt: '2026-01-01T00:00:00Z',
       });
 
       render(
         <TargetProgressText
           target={target}
-          assigned={5000}
+          assigned={0}
           activity={0}
-          available={5000}
-          currentMonth="2026-01"
+          available={50000}
+          currentMonth="2026-02"
         />
       );
 
-      expect(screen.getByText(/more needed by the 15\./)).toBeInTheDocument();
+      expect(screen.getByText(/500,00 needed this month/)).toBeInTheDocument();
     });
 
-    it('should format date with Norwegian day format (e.g., "15.")', () => {
+    it('should handle by_date target in final month', () => {
+      // Target: 1000 kr by June 30, current month is June (final month)
+      // Available: 200 kr
+      // Remaining: 800 kr
+      // Months remaining: 1 (same month as target)
+      // Should show: 800 kr needed this month
       const target = createMockTarget({
         targetType: 'by_date',
         targetAmount: 100000,
@@ -309,36 +347,40 @@ describe('TargetProgressText', () => {
       render(
         <TargetProgressText
           target={target}
-          assigned={5000}
+          assigned={0}
           activity={0}
-          available={5000}
-          currentMonth="2026-01"
+          available={20000}
+          currentMonth="2026-06"
         />
       );
 
-      expect(screen.getByText(/by the 30\./)).toBeInTheDocument();
+      expect(screen.getByText(/800,00 needed this month/)).toBeInTheDocument();
     });
 
-    it('should calculate remaining amount correctly for by_date target', () => {
+    it('should round up monthly amount to avoid underfunding', () => {
+      // Target: 1001 kr by March (3 months: Jan, Feb, Mar)
+      // Available: 0 kr
+      // Remaining: 1001 kr
+      // Monthly: 1001 / 3 = 333.67 kr (100100 / 3 = 33366.67 cents → rounds up to 33367)
       const target = createMockTarget({
         targetType: 'by_date',
-        targetAmount: 100000,
-        targetDate: '2026-06-30',
+        targetAmount: 100100, // 1001.00 kr
+        targetDate: '2026-03-30',
         createdAt: '2026-01-01T00:00:00Z',
       });
 
       render(
         <TargetProgressText
           target={target}
-          assigned={5000}
+          assigned={0}
           activity={0}
-          available={5000}
+          available={0}
           currentMonth="2026-01"
         />
       );
 
-      // Remaining: 100000 - 5000 = 95000 = 950.00 kr
-      expect(screen.getByText(/950,00 more needed/)).toBeInTheDocument();
+      // Should round up to ensure target is met
+      expect(screen.getByText(/333,67 needed this month/)).toBeInTheDocument();
     });
   });
 
@@ -446,8 +488,12 @@ describe('TargetProgressText', () => {
 
   describe('Negative Assigned Amount', () => {
     it('should calculate remaining correctly when assigned is negative (by_date)', () => {
-      // Target: 900 kr, Assigned: -707.31 kr
-      // Remaining should be: 900 - (-707.31) = 1607.31 kr
+      // Target: 900 kr by Feb 20 (2 months: Jan, Feb)
+      // Assigned: -707.31 kr (money moved out)
+      // Activity: +707.31 kr (offsets to 0 available)
+      // Available: 0 kr
+      // Remaining: 900 - 0 = 900 kr
+      // Monthly: 900 / 2 = 450 kr needed this month
       const target = createMockTarget({
         targetType: 'by_date',
         targetAmount: 90000, // 900 kr
@@ -463,8 +509,8 @@ describe('TargetProgressText', () => {
         />
       );
 
-      // Should show: 1607.31 more needed by the 20th
-      expect(screen.getByText(/1 607,31 more needed by the 20/)).toBeInTheDocument();
+      // Should show monthly amount: 450.00 needed this month
+      expect(screen.getByText(/450,00 needed this month/)).toBeInTheDocument();
     });
 
     it('should calculate remaining correctly when assigned is negative (monthly)', () => {

@@ -204,11 +204,25 @@ export function TargetProgressText({
 
   // Case 4: Underfunded - assigned < target
   if (target.targetType === 'by_date') {
+    // Calculate months remaining from current month to target month
+    const currentDate = new Date(currentMonth + '-01');
     const targetDate = new Date(target.targetDate);
-    const dayText = getDayWithSuffix(targetDate);
+
+    const monthsRemaining = Math.max(
+      1,
+      (targetDate.getFullYear() - currentDate.getFullYear()) * 12 +
+        (targetDate.getMonth() - currentDate.getMonth()) +
+        1
+    );
+
+    // Calculate monthly amount needed (remaining / months remaining)
+    // Use available instead of assigned to account for existing progress
+    const actualRemaining = target.targetAmount - available;
+    const monthlyAmount = Math.ceil(actualRemaining / monthsRemaining);
+
     return (
       <span className="text-yellow-600 text-sm">
-        {formatAmount(remaining)} more needed by the {dayText}
+        {formatAmount(monthlyAmount)} needed this month
       </span>
     );
   }
