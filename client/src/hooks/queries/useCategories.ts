@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Category, CategoryGroup } from '@/types';
 import { api } from '@/api/client';
+import { budgetKeys } from './useBudget';
 
 export const categoryKeys = {
   all: ['categories'] as const,
@@ -87,6 +88,8 @@ export function useReorderCategories() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: categoryKeys.all });
       queryClient.invalidateQueries({ queryKey: categoryKeys.groups });
+      // Also invalidate budget queries to reflect new order
+      queryClient.invalidateQueries({ queryKey: budgetKeys.all });
     },
   });
 }

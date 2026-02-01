@@ -134,6 +134,7 @@ export function getBudgetForMonth(userId: string, month: string): BudgetMonth {
       categoryName: row.category_name,
       groupId: row.group_id,
       groupName: row.group_name,
+      sortOrder: row.category_sort_order,
       assigned: row.assigned_this_month,
       activity: row.activity_this_month,
       available: row.cumulative_assigned + row.cumulative_activity,

@@ -243,6 +243,7 @@ export interface BudgetEntry {
   categoryName: string;
   groupId: string | null;
   groupName: string | null;
+  sortOrder: number;
   assigned: number;
   activity: number;
   available: number;

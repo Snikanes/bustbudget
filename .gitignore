@@ -29,3 +29,7 @@ npm-debug.log*
 
 # TypeScript
 *.tsbuildinfo
+
+# Compiled vite config
+client/vite.config.js
+client/vite.config.d.ts

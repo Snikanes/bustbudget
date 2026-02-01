@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { GripVertical } from 'lucide-react';
 import { BudgetEntry } from '@/types';
 import { formatNOK } from '@/utils/currency';
 import { useUpdateBudgetEntry } from '@/hooks/queries/useBudget';
@@ -10,9 +11,22 @@ import TargetProgressIndicator, { TargetProgressText } from './TargetProgressInd
 interface CategoryRowProps {
   category: BudgetEntry;
   month: string;
+  isDragging?: boolean;
+  isDragOver?: boolean;
+  onDragStart?: () => void;
+  onDragOver?: (e: React.DragEvent) => void;
+  onDragEnd?: () => void;
 }
 
-function CategoryRow({ category, month }: CategoryRowProps) {
+function CategoryRow({
+  category,
+  month,
+  isDragging = false,
+  isDragOver = false,
+  onDragStart,
+  onDragOver,
+  onDragEnd,
+}: CategoryRowProps) {
   const [isEditing, setIsEditing] = useState(false);
   const updateBudgetEntry = useUpdateBudgetEntry();
   const selectedCategory = useUIStore((s) => s.selectedCategory);
@@ -40,16 +54,28 @@ function CategoryRow({ category, month }: CategoryRowProps) {
   return (
     <div
       onClick={handleRowClick}
+      draggable
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDragEnd={onDragEnd}
       className={`cursor-pointer transition-colors ${
         isSelected ? 'bg-blue-50 hover:bg-blue-100' : 'hover:bg-gray-50'
-      }`}
+      } ${isDragging ? 'opacity-50' : ''} ${isDragOver ? 'border-t-2 border-blue-500' : ''}`}
     >
       <div className="grid grid-cols-[1fr_120px_120px_120px] gap-2 px-4 py-2">
         {/* Category name with progress */}
-        <div className="pl-6 text-gray-700 flex flex-col gap-1 min-w-0">
+        <div className="text-gray-700 flex flex-col gap-1 min-w-0">
           {/* Category name and target text on same line */}
           <div className="flex items-center justify-between gap-2">
-            <span>{category.categoryName}</span>
+            <div className="flex items-center gap-2">
+              <div
+                className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 p-1 -ml-1"
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                <GripVertical className="w-4 h-4" />
+              </div>
+              <span>{category.categoryName}</span>
+            </div>
             {category.target && (
               <TargetProgressText
                 target={category.target}
