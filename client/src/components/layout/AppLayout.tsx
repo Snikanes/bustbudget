@@ -1,6 +1,7 @@
 import { Outlet, useLocation } from 'react-router-dom';
 import LeftSidebar from './LeftSidebar';
 import RightSidebar from './RightSidebar';
+import HelpButton from '../shared/HelpButton';
 
 function AppLayout() {
   const location = useLocation();
@@ -13,6 +14,7 @@ function AppLayout() {
         <Outlet />
       </main>
       {isBudgetView && <RightSidebar />}
+      <HelpButton />
     </div>
   );
 }
