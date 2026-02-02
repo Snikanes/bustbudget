@@ -1,7 +1,7 @@
 import { useRef } from 'react';
 import { X, Info, Upload } from 'lucide-react';
 
-export type FileType = 'qfx' | 'excel';
+export type FileType = 'qfx' | 'excel' | 'csv';
 
 export interface ImportedFile {
   type: FileType;
@@ -26,13 +26,23 @@ function FileImportModal({ onClose, onFileSelected }: FileImportModalProps) {
 
     const fileName = file.name.toLowerCase();
     const isExcel = fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
+    const isCSV = fileName.endsWith('.csv');
 
     const reader = new FileReader();
     reader.onload = (event) => {
       const content = event.target?.result;
       if (content) {
+        let fileType: FileType;
+        if (isExcel) {
+          fileType = 'excel';
+        } else if (isCSV) {
+          fileType = 'csv';
+        } else {
+          fileType = 'qfx';
+        }
+
         onFileSelected({
-          type: isExcel ? 'excel' : 'qfx',
+          type: fileType,
           content,
         });
       }
@@ -67,7 +77,7 @@ function FileImportModal({ onClose, onFileSelected }: FileImportModalProps) {
           </p>
 
           <div className="text-sm text-gray-600">
-            <p><span className="font-medium">Supported formats:</span> QFX, OFX, Excel (.xlsx)</p>
+            <p><span className="font-medium">Supported formats:</span> QFX, OFX, Excel (.xlsx), CSV</p>
           </div>
 
           {/* Info box */}
@@ -101,7 +111,7 @@ function FileImportModal({ onClose, onFileSelected }: FileImportModalProps) {
         <input
           ref={fileInputRef}
           type="file"
-          accept=".qfx,.ofx,.xlsx,.xls"
+          accept=".qfx,.ofx,.xlsx,.xls,.csv"
           onChange={handleFileChange}
           className="hidden"
         />

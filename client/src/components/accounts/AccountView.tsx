@@ -6,6 +6,7 @@ import { useTransactions } from '@/hooks/queries/useTransactions';
 import { formatNOK } from '@/utils/currency';
 import { parseQFX, ParsedTransaction } from '@/utils/qfxParser';
 import { parseExcel } from '@/utils/excelParser';
+import { parseCSV } from '@/utils/csvParser';
 import TransactionTable from './TransactionTable';
 import TextInput from '@/components/shared/TextInput';
 import FileImportModal, { ImportedFile } from './FileImportModal';
@@ -50,6 +51,8 @@ function AccountView() {
     let result;
     if (file.type === 'excel') {
       result = parseExcel(file.content as ArrayBuffer);
+    } else if (file.type === 'csv') {
+      result = parseCSV(file.content as string);
     } else {
       result = parseQFX(file.content as string);
     }
