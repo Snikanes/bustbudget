@@ -229,6 +229,7 @@ function AccountView() {
           fileName={rawFileData.fileName}
           originalContent={rawFileData.originalContent}
           fileType={rawFileData.fileType}
+          startingBalanceDate={transactions?.find(t => t.isStartingBalance)?.date}
           onClose={() => setRawFileData(null)}
           onMappingComplete={handleMappingComplete}
         />

@@ -60,6 +60,7 @@ interface ColumnMappingModalProps {
   fileName: string;
   originalContent: string | ArrayBuffer;
   fileType: 'csv' | 'excel';
+  startingBalanceDate?: string;
   onClose: () => void;
   onMappingComplete: (transactions: ParsedTransaction[]) => void;
 }
@@ -69,6 +70,7 @@ function ColumnMappingModal({
   fileName,
   originalContent,
   fileType,
+  startingBalanceDate,
   onClose,
   onMappingComplete,
 }: ColumnMappingModalProps) {
@@ -121,6 +123,9 @@ function ColumnMappingModal({
     }
     return ';';
   });
+
+  const [dateFrom, setDateFrom] = useState(() => startingBalanceDate ?? '');
+  const [dateTo, setDateTo] = useState(() => new Date().toISOString().split('T')[0]);
 
   const [selectedProfileId, setSelectedProfileId] = useState<string>('');
   const [saveProfileName, setSaveProfileName] = useState('');
@@ -245,6 +250,16 @@ function ColumnMappingModal({
     return errors;
   }, [columnRoles, amountMode]);
 
+  // Filter transactions by date range
+  const filterByDateRange = useCallback((transactions: ParsedTransaction[]) => {
+    if (!dateFrom && !dateTo) return transactions;
+    return transactions.filter(t => {
+      if (dateFrom && t.date < dateFrom) return false;
+      if (dateTo && t.date > dateTo) return false;
+      return true;
+    });
+  }, [dateFrom, dateTo]);
+
   // Live transaction count — run the parser to show how many rows will import
   const parsedTransactionCount = useMemo(() => {
     if (validationErrors.length > 0) return null;
@@ -252,8 +267,9 @@ function ColumnMappingModal({
       ? rawData
       : { ...rawData, headers: displayHeaders, rows: [rawData.headers, ...rawData.rows] };
     const result = applyMapping(dataForParsing, currentConfig);
-    return result.error ? null : result.transactions.length;
-  }, [rawData, hasHeaderRow, displayHeaders, currentConfig, validationErrors]);
+    if (result.error) return null;
+    return filterByDateRange(result.transactions).length;
+  }, [rawData, hasHeaderRow, displayHeaders, currentConfig, validationErrors, filterByDateRange]);
 
   // Date preview
   const datePreview = useMemo(() => {
@@ -354,8 +370,8 @@ function ColumnMappingModal({
       alert(result.error);
       return;
     }
-    onMappingComplete(result.transactions);
-  }, [rawData, hasHeaderRow, displayHeaders, currentConfig, onMappingComplete]);
+    onMappingComplete(filterByDateRange(result.transactions));
+  }, [rawData, hasHeaderRow, displayHeaders, currentConfig, onMappingComplete, filterByDateRange]);
 
   // When amount mode changes, clear incompatible role assignments
   useEffect(() => {
@@ -529,8 +545,8 @@ function ColumnMappingModal({
             )}
           </div>
 
-          {/* Header row toggle & skip rows */}
-          <div className="flex items-center gap-6">
+          {/* Header row toggle, skip rows, and date range */}
+          <div className="flex items-center gap-6 flex-wrap">
             <label className="flex items-center gap-2 text-sm text-gray-700">
               <input
                 type="checkbox"
@@ -551,6 +567,30 @@ function ColumnMappingModal({
                 className="w-16 text-sm border border-gray-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </label>
+            <div className="flex items-center gap-2 text-sm text-gray-700">
+              <span>From:</span>
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className="text-sm border border-gray-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <span>To:</span>
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                className="text-sm border border-gray-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              {(dateFrom || dateTo) && (
+                <button
+                  onClick={() => { setDateFrom(''); setDateTo(''); }}
+                  className="text-xs text-gray-400 hover:text-gray-600"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Validation errors */}
