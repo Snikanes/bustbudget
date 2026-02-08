@@ -13,6 +13,7 @@ import transferRoutes from './routes/transferRoutes.js';
 import budgetRoutes from './routes/budgetRoutes.js';
 import payeeRoutes from './routes/payeeRoutes.js';
 import importPayeeMappingRoutes from './routes/importPayeeMappingRoutes.js';
+import importProfileRoutes from './routes/importProfileRoutes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { requireAuth } from './middleware/auth.js';
 
@@ -40,6 +41,7 @@ app.use('/api/transfers', requireAuth, transferRoutes);
 app.use('/api/budgets', requireAuth, budgetRoutes);
 app.use('/api/payees', requireAuth, payeeRoutes);
 app.use('/api/import-payee-mappings', requireAuth, importPayeeMappingRoutes);
+app.use('/api/import-profiles', requireAuth, importProfileRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

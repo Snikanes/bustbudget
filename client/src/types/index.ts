@@ -138,6 +138,8 @@ export interface RenamingRule {
   originalPayee: string;
 }
 
+export type { ImportProfile } from './importMapping';
+
 export interface PayeeWithDetails {
   id: string;
   name: string;

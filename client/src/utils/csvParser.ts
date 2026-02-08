@@ -2,28 +2,7 @@
 // Format: semicolon-delimited with Norwegian column names
 
 import { ParsedTransaction, ParseResult } from './qfxParser';
-
-function parseCSVLine(line: string, delimiter: string = ';'): string[] {
-  const result: string[] = [];
-  let current = '';
-  let inQuotes = false;
-
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
-
-    if (char === '"') {
-      inQuotes = !inQuotes;
-    } else if (char === delimiter && !inQuotes) {
-      result.push(current.trim());
-      current = '';
-    } else {
-      current += char;
-    }
-  }
-
-  result.push(current.trim());
-  return result;
-}
+import { parseCSVLine } from './rawFileReader';
 
 function parseDate(dateStr: string): string | null {
   // Skip reserved/pending transactions

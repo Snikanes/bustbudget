@@ -6,6 +6,7 @@ export type FileType = 'qfx' | 'excel' | 'csv';
 export interface ImportedFile {
   type: FileType;
   content: string | ArrayBuffer;
+  fileName: string;
 }
 
 interface FileImportModalProps {
@@ -44,6 +45,7 @@ function FileImportModal({ onClose, onFileSelected }: FileImportModalProps) {
         onFileSelected({
           type: fileType,
           content,
+          fileName: file.name,
         });
       }
     };

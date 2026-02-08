@@ -5,12 +5,13 @@ import { useAccount, useUpdateAccount } from '@/hooks/queries/useAccounts';
 import { useTransactions } from '@/hooks/queries/useTransactions';
 import { formatNOK } from '@/utils/currency';
 import { parseQFX, ParsedTransaction } from '@/utils/qfxParser';
-import { parseExcel } from '@/utils/excelParser';
-import { parseCSV } from '@/utils/csvParser';
+import { readExcelToRaw, readCsvToRaw, detectCsvDelimiter } from '@/utils/rawFileReader';
+import { RawTabularData } from '@/types/importMapping';
 import TransactionTable from './TransactionTable';
 import TextInput from '@/components/shared/TextInput';
 import FileImportModal, { ImportedFile } from './FileImportModal';
 import ImportPreviewModal from './ImportPreviewModal';
+import ColumnMappingModal from './ColumnMappingModal';
 import ReconcileModal from './ReconcileModal';
 
 function AccountView() {
@@ -25,6 +26,12 @@ function AccountView() {
   const [parsedTransactions, setParsedTransactions] = useState<ParsedTransaction[] | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [importResult, setImportResult] = useState<{ imported: number; skipped: number } | null>(null);
+  const [rawFileData, setRawFileData] = useState<{
+    data: RawTabularData;
+    fileName: string;
+    originalContent: string | ArrayBuffer;
+    fileType: 'csv' | 'excel';
+  } | null>(null);
 
   // Reconcile state
   const [showReconcileModal, setShowReconcileModal] = useState(false);
@@ -48,21 +55,37 @@ function AccountView() {
     setShowFileImport(false);
     setImportError(null);
 
-    let result;
-    if (file.type === 'excel') {
-      result = parseExcel(file.content as ArrayBuffer);
-    } else if (file.type === 'csv') {
-      result = parseCSV(file.content as string);
+    if (file.type === 'csv') {
+      const delimiter = detectCsvDelimiter(file.content as string);
+      const raw = readCsvToRaw(file.content as string, delimiter);
+      setRawFileData({
+        data: raw,
+        fileName: file.fileName,
+        originalContent: file.content,
+        fileType: 'csv',
+      });
+    } else if (file.type === 'excel') {
+      const raw = readExcelToRaw(file.content as ArrayBuffer);
+      setRawFileData({
+        data: raw,
+        fileName: file.fileName,
+        originalContent: file.content,
+        fileType: 'excel',
+      });
     } else {
-      result = parseQFX(file.content as string);
+      // QFX/OFX — parse directly (no mapping step)
+      const result = parseQFX(file.content as string);
+      if (result.error) {
+        setImportError(result.error);
+        return;
+      }
+      setParsedTransactions(result.transactions);
     }
+  };
 
-    if (result.error) {
-      setImportError(result.error);
-      return;
-    }
-
-    setParsedTransactions(result.transactions);
+  const handleMappingComplete = (transactions: ParsedTransaction[]) => {
+    setRawFileData(null);
+    setParsedTransactions(transactions);
   };
 
   const handleImportComplete = (imported: number, skipped: number) => {
@@ -196,6 +219,18 @@ function AccountView() {
         <FileImportModal
           onClose={() => setShowFileImport(false)}
           onFileSelected={handleFileSelected}
+        />
+      )}
+
+      {/* Column Mapping Modal */}
+      {rawFileData && (
+        <ColumnMappingModal
+          rawData={rawFileData.data}
+          fileName={rawFileData.fileName}
+          originalContent={rawFileData.originalContent}
+          fileType={rawFileData.fileType}
+          onClose={() => setRawFileData(null)}
+          onMappingComplete={handleMappingComplete}
         />
       )}
 

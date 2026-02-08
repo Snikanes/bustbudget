@@ -118,6 +118,16 @@ export interface ImportPayeeMappingWithPayeeRow extends ImportPayeeMappingRow {
   last_category_id: string | null;
 }
 
+export interface ImportProfileRow {
+  id: string;
+  user_id: string;
+  name: string;
+  file_type: string;
+  config: string;
+  created_at: string;
+  updated_at: string;
+}
+
 // API response types (camelCase, with computed fields)
 
 // User types
@@ -233,6 +243,15 @@ export interface ImportPayeeMapping {
   payeeId: string;
   payeeName: string;
   lastCategoryId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ImportProfile {
+  id: string;
+  name: string;
+  fileType: string;
+  config: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
 }
@@ -377,4 +396,15 @@ export interface PayeeWithDetails {
 
 export interface UpdatePayeeRequest {
   name: string;
+}
+
+export interface CreateImportProfileRequest {
+  name: string;
+  fileType: string;
+  config: Record<string, unknown>;
+}
+
+export interface UpdateImportProfileRequest {
+  name?: string;
+  config?: Record<string, unknown>;
 }
