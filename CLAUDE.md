@@ -112,15 +112,22 @@ ynab-clone/
 
 ### Budget Calculation
 
-**Available to Assign** = Total Inflows - Total Assigned
+**Available to Assign** = Total Inflows - Total Assigned - Cumulative Overspending
 - Inflows: Positive transactions without category + starting balances
 - Only UNCATEGORIZED inflows count (categorized inflows go to category activity)
+- Cumulative overspending: sum of all month-boundary resets from prior months
 
-**Category Available** = Cumulative Assigned + Cumulative Activity
-- Cumulative = all time through current month
-- Activity = transactions in category (negative for spending)
+**Category Available** is computed iteratively month-by-month:
+- Each month: `balance = prev_balance + assigned + activity`
+- At each month boundary, negative balances reset to 0 (`max(balance, 0)`)
+- The reset amount is accumulated as overspending and deducted from RTA
+- Implementation: `computeBudgetWithResets()` in `budgetService.ts`
 
-**Overspending** reduces Available to Assign in subsequent months
+**Month-Boundary Overspending Resets (YNAB-style):**
+- Category overspent at end of month → resets to 0 next month, RTA reduced
+- Positive balances carry forward unchanged
+- Overspending in the *current* month shows as negative in the category but does NOT reduce current-month RTA (only affects the next month)
+- All overspending treated as cash overspending (no credit vs. cash distinction)
 
 ### Target Types
 
