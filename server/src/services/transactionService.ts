@@ -66,6 +66,47 @@ export function getTransactionsByAccount(userId: string, accountId: string): Tra
   return rows.map(rowToTransaction);
 }
 
+export function bulkToggleCleared(userId: string, accountId: string): { updatedCount: number } {
+  const db = getDb();
+
+  // Validate account exists and belongs to user
+  const account = db.prepare('SELECT id FROM account WHERE user_id = ? AND id = ?').get(userId, accountId);
+  if (!account) {
+    throw new NotFoundError('Account', accountId);
+  }
+
+  // Get all non-reconciled transactions for this account
+  // is_cleared: 0 = uncleared, 1 = cleared, 2 = reconciled
+  const transactions = db.prepare(`
+    SELECT id, is_cleared FROM "transaction"
+    WHERE user_id = ? AND account_id = ? AND is_cleared < 2
+  `).all(userId, accountId) as { id: string; is_cleared: number }[];
+
+  if (transactions.length === 0) {
+    return { updatedCount: 0 };
+  }
+
+  // Determine new state based on majority
+  const unclearedCount = transactions.filter(t => t.is_cleared === 0).length;
+  const clearedCount = transactions.filter(t => t.is_cleared === 1).length;
+
+  // If all uncleared, set all to cleared
+  // If all cleared, set all to uncleared
+  // If mixed, set all to cleared (prioritize clearing)
+  const newState = unclearedCount > 0 ? 1 : 0;
+
+  const now = new Date().toISOString();
+  const stmt = db.prepare(`
+    UPDATE "transaction"
+    SET is_cleared = ?, updated_at = ?
+    WHERE user_id = ? AND account_id = ? AND is_cleared < 2
+  `);
+
+  const result = stmt.run(newState, now, userId, accountId);
+
+  return { updatedCount: result.changes };
+}
+
 export function getTransactionById(userId: string, id: string): Transaction {
   const db = getDb();
   const row = db.prepare(`

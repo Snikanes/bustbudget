@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, CheckCircle2 } from 'lucide-react';
 import { Transaction } from '@/types';
 import TransactionRow from './TransactionRow';
 import TransactionModal from './TransactionModal';
+import { useBulkToggleCleared } from '@/hooks/queries/useTransactions';
 
 interface TransactionTableProps {
   accountId: string;
@@ -11,6 +12,7 @@ interface TransactionTableProps {
 
 function TransactionTable({ accountId, transactions }: TransactionTableProps) {
   const [showModal, setShowModal] = useState(false);
+  const bulkToggleCleared = useBulkToggleCleared();
 
   return (
     <div className="bg-white rounded-lg shadow">
@@ -34,7 +36,16 @@ function TransactionTable({ accountId, transactions }: TransactionTableProps) {
         <div>Memo</div>
         <div className="text-right">Outflow</div>
         <div className="text-right">Inflow</div>
-        <div className="text-center">C</div>
+        <div className="flex items-center justify-center">
+          <button
+            onClick={() => bulkToggleCleared.mutate(accountId)}
+            disabled={bulkToggleCleared.isPending || transactions.length === 0}
+            className="p-0.5 text-gray-400 hover:text-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Toggle all cleared/uncleared"
+          >
+            <CheckCircle2 className="w-4 h-4" />
+          </button>
+        </div>
         <div></div>
       </div>
 

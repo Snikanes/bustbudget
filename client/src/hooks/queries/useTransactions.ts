@@ -158,3 +158,18 @@ export function useReconcileAccount() {
     },
   });
 }
+
+export function useBulkToggleCleared() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (accountId: string) =>
+      api.post<{ updatedCount: number }>(`/api/accounts/${accountId}/transactions/toggle-cleared`, {}),
+    onSuccess: (_, accountId) => {
+      queryClient.invalidateQueries({
+        queryKey: transactionKeys.byAccount(accountId),
+      });
+      queryClient.invalidateQueries({ queryKey: accountKeys.all });
+    },
+  });
+}

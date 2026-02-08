@@ -102,4 +102,12 @@ router.post('/:id/reconcile', asyncHandler(async (req, res) => {
   res.json(result);
 }));
 
+// POST /api/accounts/:id/transactions/toggle-cleared
+router.post('/:id/transactions/toggle-cleared', asyncHandler(async (req, res) => {
+  const userId = (req as AuthenticatedRequest).user.userId;
+  const id = req.params.id as string;
+  const result = transactionService.bulkToggleCleared(userId, id);
+  res.json(result);
+}));
+
 export default router;
