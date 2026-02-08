@@ -72,6 +72,7 @@ export interface BudgetMonth {
   availableToAssign: number;
   totalInflows: number;
   totalAssigned: number;
+  overspending: number;
   groups: {
     id: string;
     name: string;

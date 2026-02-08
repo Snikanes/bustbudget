@@ -17,14 +17,6 @@ router.get('/:month', asyncHandler(async (req, res) => {
   res.json(budget);
 }));
 
-// GET /api/budgets/:month/available
-router.get('/:month/available', asyncHandler(async (req, res) => {
-  const userId = (req as AuthenticatedRequest).user.userId;
-  const month = req.params.month as string;
-  const result = budgetService.getAvailableToAssign(userId, month);
-  res.json(result);
-}));
-
 // PUT /api/budgets/:month/categories/:categoryId
 router.put('/:month/categories/:categoryId', asyncHandler(async (req, res) => {
   const userId = (req as AuthenticatedRequest).user.userId;

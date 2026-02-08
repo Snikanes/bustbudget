@@ -5,28 +5,12 @@ import { api } from '@/api/client';
 export const budgetKeys = {
   all: ['budget'] as const,
   month: (month: string) => ['budget', month] as const,
-  available: (month: string) => ['budget', month, 'available'] as const,
 };
 
 export function useBudget(month: string) {
   return useQuery({
     queryKey: budgetKeys.month(month),
     queryFn: () => api.get<BudgetMonth>(`/api/budgets/${month}`),
-  });
-}
-
-export function useAvailableToAssign(month: string) {
-  return useQuery({
-    queryKey: budgetKeys.available(month),
-    queryFn: () =>
-      api.get<{
-        availableToAssign: number;
-        breakdown: {
-          totalInflows: number;
-          totalAssigned: number;
-          overspending: number;
-        };
-      }>(`/api/budgets/${month}/available`),
   });
 }
 
@@ -108,9 +92,6 @@ export function useUpdateBudgetEntry() {
       // Refetch to ensure consistency
       queryClient.invalidateQueries({
         queryKey: budgetKeys.month(variables.month),
-      });
-      queryClient.invalidateQueries({
-        queryKey: budgetKeys.available(variables.month),
       });
     },
   });

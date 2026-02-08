@@ -4,70 +4,177 @@ import { BudgetMonth, BudgetEntry, MonthlyBudget, MonthlyBudgetRow } from '../mo
 import { NotFoundError } from '../middleware/errorHandler.js';
 import * as categoryTargetService from './categoryTargetService.js';
 
-interface CategoryBudgetRow {
+interface CategoryMetadataRow {
   category_id: string;
   category_name: string;
   group_id: string | null;
   group_name: string | null;
   group_sort_order: number | null;
   category_sort_order: number;
-  assigned_this_month: number;
-  activity_this_month: number;
-  cumulative_assigned: number;
-  cumulative_activity: number;
+}
+
+interface AssignedRow {
+  category_id: string;
+  year_month: string;
+  assigned_amount: number;
+}
+
+interface ActivityRow {
+  category_id: string;
+  year_month: string;
+  activity: number;
+}
+
+/**
+ * Generates a contiguous list of YYYY-MM strings from earliest to target (inclusive).
+ */
+function getMonthRange(earliest: string, target: string): string[] {
+  const months: string[] = [];
+  const [startYear, startMonth] = earliest.split('-').map(Number);
+  const [endYear, endMonth] = target.split('-').map(Number);
+
+  let y = startYear;
+  let m = startMonth;
+  while (y < endYear || (y === endYear && m <= endMonth)) {
+    months.push(`${y}-${String(m).padStart(2, '0')}`);
+    m++;
+    if (m > 12) { m = 1; y++; }
+  }
+  return months;
+}
+
+interface ComputedBudgetData {
+  /** Per-category final balance (available) for the target month */
+  balances: Map<string, number>;
+  /** Per-category assigned amount for the target month */
+  assigned: Map<string, number>;
+  /** Per-category activity for the target month */
+  activity: Map<string, number>;
+  /** Cumulative overspending deducted from RTA (sum of all month-boundary resets before target month) */
+  cumulativeOverspending: number;
+}
+
+/**
+ * Iterates month-by-month from the earliest data month to the target month,
+ * applying max(balance, 0) resets at each month boundary.
+ */
+function computeBudgetWithResets(userId: string, month: string): ComputedBudgetData {
+  const db = getDb();
+
+  // Find the earliest month with any budget or transaction data
+  const earliestAssigned = db.prepare(`
+    SELECT MIN(year_month) as m FROM monthly_budget WHERE user_id = ?
+  `).get(userId) as { m: string | null };
+
+  const earliestActivity = db.prepare(`
+    SELECT MIN(substr(date, 1, 7)) as m FROM "transaction"
+    WHERE user_id = ? AND category_id IS NOT NULL AND transfer_id IS NULL
+  `).get(userId) as { m: string | null };
+
+  const candidates = [earliestAssigned.m, earliestActivity.m, month].filter(Boolean) as string[];
+  const earliest = candidates.sort()[0];
+
+  // Bulk query: all per-category per-month assignments up through target month
+  const assignedRows = db.prepare(`
+    SELECT category_id, year_month, assigned_amount
+    FROM monthly_budget
+    WHERE user_id = ? AND year_month <= ?
+  `).all(userId, month) as AssignedRow[];
+
+  // Bulk query: all per-category per-month activity up through target month
+  const activityRows = db.prepare(`
+    SELECT category_id, substr(date, 1, 7) as year_month, COALESCE(SUM(amount), 0) as activity
+    FROM "transaction"
+    WHERE user_id = ?
+      AND category_id IS NOT NULL
+      AND transfer_id IS NULL
+      AND substr(date, 1, 7) <= ?
+    GROUP BY category_id, substr(date, 1, 7)
+  `).all(userId, month) as ActivityRow[];
+
+  // Build lookup maps: "categoryId:month" -> value
+  const assignedMap = new Map<string, number>();
+  for (const row of assignedRows) {
+    assignedMap.set(`${row.category_id}:${row.year_month}`, row.assigned_amount);
+  }
+
+  const activityMap = new Map<string, number>();
+  for (const row of activityRows) {
+    activityMap.set(`${row.category_id}:${row.year_month}`, row.activity);
+  }
+
+  // Collect all category IDs that have any data
+  const categoryIds = new Set<string>();
+  for (const row of assignedRows) categoryIds.add(row.category_id);
+  for (const row of activityRows) categoryIds.add(row.category_id);
+
+  // Also include categories with no data yet (so they show up with 0 balance)
+  const allCategoryIds = db.prepare(`
+    SELECT id FROM category WHERE user_id = ?
+  `).all(userId) as { id: string }[];
+  for (const row of allCategoryIds) categoryIds.add(row.id);
+
+  const months = getMonthRange(earliest, month);
+
+  // Running balance per category
+  const balance = new Map<string, number>();
+  for (const catId of categoryIds) balance.set(catId, 0);
+
+  let cumulativeOverspending = 0;
+
+  // Per-category assigned/activity for the target month (to return)
+  const targetAssigned = new Map<string, number>();
+  const targetActivity = new Map<string, number>();
+
+  for (let i = 0; i < months.length; i++) {
+    const m = months[i];
+
+    // At month boundary (before processing this month), reset negative balances
+    if (i > 0) {
+      for (const catId of categoryIds) {
+        const bal = balance.get(catId)!;
+        if (bal < 0) {
+          cumulativeOverspending += -bal; // add the absolute overspent amount
+          balance.set(catId, 0);
+        }
+      }
+    }
+
+    // Apply this month's assigned + activity
+    for (const catId of categoryIds) {
+      const a = assignedMap.get(`${catId}:${m}`) ?? 0;
+      const act = activityMap.get(`${catId}:${m}`) ?? 0;
+      balance.set(catId, balance.get(catId)! + a + act);
+
+      if (m === month) {
+        targetAssigned.set(catId, a);
+        targetActivity.set(catId, act);
+      }
+    }
+  }
+
+  return {
+    balances: balance,
+    assigned: targetAssigned,
+    activity: targetActivity,
+    cumulativeOverspending,
+  };
 }
 
 export function getBudgetForMonth(userId: string, month: string): BudgetMonth {
   const db = getDb();
 
-  // Get all categories with their budget data
-  const rows = db.prepare(`
-    WITH monthly_assigned AS (
-      SELECT category_id, assigned_amount
-      FROM monthly_budget
-      WHERE user_id = ? AND year_month = ?
-    ),
-    monthly_activity AS (
-      SELECT category_id, COALESCE(SUM(amount), 0) as activity
-      FROM "transaction"
-      WHERE user_id = ?
-        AND category_id IS NOT NULL
-        AND substr(date, 1, 7) = ?
-        AND transfer_id IS NULL
-      GROUP BY category_id
-    ),
-    cumulative_assigned AS (
-      SELECT category_id, COALESCE(SUM(assigned_amount), 0) as total
-      FROM monthly_budget
-      WHERE user_id = ? AND year_month <= ?
-      GROUP BY category_id
-    ),
-    cumulative_activity AS (
-      SELECT category_id, COALESCE(SUM(amount), 0) as total
-      FROM "transaction"
-      WHERE user_id = ?
-        AND category_id IS NOT NULL
-        AND substr(date, 1, 7) <= ?
-        AND transfer_id IS NULL
-      GROUP BY category_id
-    )
+  // Get category metadata (groups, sort order)
+  const metadataRows = db.prepare(`
     SELECT
       c.id as category_id,
       c.name as category_name,
       c.group_id,
       cg.name as group_name,
       cg.sort_order as group_sort_order,
-      c.sort_order as category_sort_order,
-      COALESCE(ma.assigned_amount, 0) as assigned_this_month,
-      COALESCE(mact.activity, 0) as activity_this_month,
-      COALESCE(ca.total, 0) as cumulative_assigned,
-      COALESCE(cact.total, 0) as cumulative_activity
+      c.sort_order as category_sort_order
     FROM category c
     LEFT JOIN category_group cg ON cg.id = c.group_id
-    LEFT JOIN monthly_assigned ma ON ma.category_id = c.id
-    LEFT JOIN monthly_activity mact ON mact.category_id = c.id
-    LEFT JOIN cumulative_assigned ca ON ca.category_id = c.id
-    LEFT JOIN cumulative_activity cact ON cact.category_id = c.id
     WHERE c.user_id = ?
     ORDER BY
       CASE WHEN c.group_id IS NULL THEN 1 ELSE 0 END,
@@ -75,10 +182,12 @@ export function getBudgetForMonth(userId: string, month: string): BudgetMonth {
       cg.name,
       c.sort_order,
       c.name
-  `).all(userId, month, userId, month, userId, month, userId, month, userId) as CategoryBudgetRow[];
+  `).all(userId) as CategoryMetadataRow[];
+
+  // Compute balances with month-boundary overspending resets
+  const computed = computeBudgetWithResets(userId, month);
 
   // Calculate total inflows (income to budget)
-  // Income = positive transactions that are NOT transfers and NOT starting balances with categories
   // Only count UNCATEGORIZED inflows - categorized inflows (e.g., refunds) go directly to category activity
   const inflowsResult = db.prepare(`
     SELECT COALESCE(SUM(amount), 0) as total
@@ -111,11 +220,11 @@ export function getBudgetForMonth(userId: string, month: string): BudgetMonth {
 
   const totalAssigned = totalAssignedResult.total;
 
-  // Calculate Available to Assign
-  const availableToAssign = totalInflows - totalAssigned;
+  // Available to Assign: inflows minus assigned minus overspending from prior months
+  const availableToAssign = totalInflows - totalAssigned - computed.cumulativeOverspending;
 
   // Get targets for all categories
-  const categoryIds = rows.map(r => r.category_id);
+  const categoryIds = metadataRows.map(r => r.category_id);
   const targetsMap = categoryTargetService.getTargetsForCategories(userId, categoryIds);
 
   // Group the categories
@@ -127,7 +236,7 @@ export function getBudgetForMonth(userId: string, month: string): BudgetMonth {
   }>();
   const ungroupedCategories: BudgetEntry[] = [];
 
-  for (const row of rows) {
+  for (const row of metadataRows) {
     const target = targetsMap.get(row.category_id);
     const entry: BudgetEntry = {
       categoryId: row.category_id,
@@ -135,9 +244,9 @@ export function getBudgetForMonth(userId: string, month: string): BudgetMonth {
       groupId: row.group_id,
       groupName: row.group_name,
       sortOrder: row.category_sort_order,
-      assigned: row.assigned_this_month,
-      activity: row.activity_this_month,
-      available: row.cumulative_assigned + row.cumulative_activity,
+      assigned: computed.assigned.get(row.category_id) ?? 0,
+      activity: computed.activity.get(row.category_id) ?? 0,
+      available: computed.balances.get(row.category_id) ?? 0,
       target: target ?? null,
     };
 
@@ -166,6 +275,7 @@ export function getBudgetForMonth(userId: string, month: string): BudgetMonth {
     availableToAssign,
     totalInflows,
     totalAssigned,
+    overspending: computed.cumulativeOverspending,
     groups,
     ungroupedCategories,
   };
@@ -223,87 +333,3 @@ export function updateBudgetEntry(
   }
 }
 
-export function getAvailableToAssign(userId: string, month: string): {
-  availableToAssign: number;
-  breakdown: {
-    totalInflows: number;
-    totalAssigned: number;
-    overspending: number;
-  };
-} {
-  const db = getDb();
-
-  // Total inflows up to this month
-  // Only count UNCATEGORIZED inflows - categorized inflows (e.g., refunds) go directly to category activity
-  const inflowsResult = db.prepare(`
-    SELECT COALESCE(SUM(amount), 0) as total
-    FROM "transaction"
-    WHERE user_id = ?
-      AND amount > 0
-      AND transfer_id IS NULL
-      AND is_starting_balance = 0
-      AND category_id IS NULL
-      AND substr(date, 1, 7) <= ?
-  `).get(userId, month) as { total: number };
-
-  const startingBalancesResult = db.prepare(`
-    SELECT COALESCE(SUM(amount), 0) as total
-    FROM "transaction"
-    WHERE user_id = ?
-      AND is_starting_balance = 1
-      AND substr(date, 1, 7) <= ?
-  `).get(userId, month) as { total: number };
-
-  const totalInflows = inflowsResult.total + startingBalancesResult.total;
-
-  // Total assigned (all time - future assignments reduce current available)
-  const totalAssignedResult = db.prepare(`
-    SELECT COALESCE(SUM(assigned_amount), 0) as total
-    FROM monthly_budget
-    WHERE user_id = ?
-  `).get(userId) as { total: number };
-
-  const totalAssigned = totalAssignedResult.total;
-
-  // Calculate overspending (negative category balances through this month)
-  const overspendingResult = db.prepare(`
-    WITH category_balances AS (
-      SELECT
-        c.id,
-        COALESCE(assigned.total, 0) + COALESCE(activity.total, 0) as balance
-      FROM category c
-      LEFT JOIN (
-        SELECT category_id, SUM(assigned_amount) as total
-        FROM monthly_budget
-        WHERE user_id = ? AND year_month <= ?
-        GROUP BY category_id
-      ) assigned ON assigned.category_id = c.id
-      LEFT JOIN (
-        SELECT category_id, SUM(amount) as total
-        FROM "transaction"
-        WHERE user_id = ?
-          AND category_id IS NOT NULL
-          AND transfer_id IS NULL
-          AND substr(date, 1, 7) <= ?
-        GROUP BY category_id
-      ) activity ON activity.category_id = c.id
-      WHERE c.user_id = ?
-    )
-    SELECT COALESCE(SUM(CASE WHEN balance < 0 THEN balance ELSE 0 END), 0) as total
-    FROM category_balances
-  `).get(userId, month, userId, month, userId) as { total: number };
-
-  const overspending = overspendingResult.total;
-
-  // Available to Assign includes overspending deduction
-  const availableToAssign = totalInflows - totalAssigned + overspending;
-
-  return {
-    availableToAssign,
-    breakdown: {
-      totalInflows,
-      totalAssigned,
-      overspending,
-    },
-  };
-}
