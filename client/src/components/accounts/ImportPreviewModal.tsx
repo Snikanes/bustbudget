@@ -3,10 +3,11 @@ import { X } from 'lucide-react';
 import { ParsedTransaction } from '@/utils/qfxParser';
 import { Transaction, Payee } from '@/types';
 import { formatNOK } from '@/utils/currency';
-import { useImportTransactions } from '@/hooks/queries/useTransactions';
+import { useImportTransactions, useCreateTransfer } from '@/hooks/queries/useTransactions';
 import { useImportPayeeMappings, useCreateImportPayeeMapping } from '@/hooks/queries/useImportPayeeMappings';
 import { useCategories } from '@/hooks/queries/useCategories';
 import { usePayees, useCreatePayee } from '@/hooks/queries/usePayees';
+import { useAccounts } from '@/hooks/queries/useAccounts';
 import PayeeSelect from '@/components/shared/PayeeSelect';
 import CategorySelect from '@/components/shared/CategorySelect';
 
@@ -46,8 +47,10 @@ function ImportPreviewModal({
   onImportComplete,
 }: ImportPreviewModalProps) {
   const importTransactions = useImportTransactions();
+  const createTransfer = useCreateTransfer();
   const { data: payeeMappings, isLoading: mappingsLoading } = useImportPayeeMappings();
   const { data: categories } = useCategories();
+  const { data: accounts } = useAccounts();
   const { data: payees = [] } = usePayees();
   const createPayeeMapping = useCreateImportPayeeMapping();
   const createPayee = useCreatePayee();
@@ -57,6 +60,7 @@ function ImportPreviewModal({
   const [editingField, setEditingField] = useState<EditingField>(null);
   // Track excluded transactions by index
   const [excludedIndices, setExcludedIndices] = useState<Set<number>>(new Set());
+  const [isImporting, setIsImporting] = useState(false);
 
   // Build a lookup for category names
   const categoryNameLookup = useMemo(() => {
@@ -66,6 +70,15 @@ function ImportPreviewModal({
     });
     return lookup;
   }, [categories]);
+
+  // Build a lookup for account names (for displaying transfer targets)
+  const accountNameLookup = useMemo(() => {
+    const lookup = new Map<string, string>();
+    accounts?.forEach((acc) => {
+      lookup.set(acc.id, acc.name);
+    });
+    return lookup;
+  }, [accounts]);
 
   // Build a lookup for payees by name
   const payeeLookup = useMemo(() => {
@@ -191,6 +204,7 @@ function ImportPreviewModal({
   };
 
   const handleImport = async () => {
+    setIsImporting(true);
     // Collect all payee names that need to be created
     const newPayeeNames = new Set<string>();
     // Collect all mappings to save after payees are created
@@ -247,8 +261,16 @@ function ImportPreviewModal({
       }
     }
 
-    // Prepare transactions with mapped payees and categories
-    const items = newTransactions.map((t) => ({
+    // Split transactions into regular and transfer
+    const transferTransactions = newTransactions.filter(
+      (t) => t.displayCategoryId?.startsWith('transfer:')
+    );
+    const regularTransactions = newTransactions.filter(
+      (t) => !t.displayCategoryId?.startsWith('transfer:')
+    );
+
+    // Prepare regular transaction items
+    const items = regularTransactions.map((t) => ({
       date: t.date,
       amount: t.amount,
       payee: t.displayPayee || undefined,
@@ -256,8 +278,35 @@ function ImportPreviewModal({
       categoryId: t.displayCategoryId || undefined,
     }));
 
-    if (items.length === 0) {
+    if (items.length === 0 && transferTransactions.length === 0) {
+      setIsImporting(false);
       onImportComplete(0, duplicateCount);
+      return;
+    }
+
+    // Create transfer transactions individually
+    let transfersCreated = 0;
+    for (const t of transferTransactions) {
+      const targetAccountId = t.displayCategoryId!.replace('transfer:', '');
+      const fromAccountId = t.amount < 0 ? accountId : targetAccountId;
+      const toAccountId = t.amount < 0 ? targetAccountId : accountId;
+      try {
+        await createTransfer.mutateAsync({
+          fromAccountId,
+          toAccountId,
+          amount: Math.abs(t.amount),
+          date: t.date,
+          memo: t.memo || undefined,
+        });
+        transfersCreated++;
+      } catch (error) {
+        console.error('Failed to create transfer during import:', error);
+      }
+    }
+
+    if (items.length === 0) {
+      setIsImporting(false);
+      onImportComplete(transfersCreated, duplicateCount);
       return;
     }
 
@@ -265,7 +314,11 @@ function ImportPreviewModal({
       { accountId, transactions: items },
       {
         onSuccess: (result) => {
-          onImportComplete(result.imported, result.skipped + duplicateCount);
+          setIsImporting(false);
+          onImportComplete(result.imported + transfersCreated, result.skipped + duplicateCount);
+        },
+        onError: () => {
+          setIsImporting(false);
         },
       }
     );
@@ -362,7 +415,11 @@ function ImportPreviewModal({
                     </span>
                   </td>
                   <td className="py-2 pr-4 max-w-[180px]">
-                    {editingField?.index === index && editingField?.field === 'payee' && !isSkipped ? (
+                    {(() => {
+                      const isTransfer = t.displayCategoryId?.startsWith('transfer:');
+                      const transferAccountId = isTransfer ? t.displayCategoryId!.replace('transfer:', '') : null;
+                      const transferPayee = transferAccountId ? `Transfer: ${accountNameLookup.get(transferAccountId) || '...'}` : null;
+                      return editingField?.index === index && editingField?.field === 'payee' && !isSkipped && !isTransfer ? (
                       <PayeeSelect
                         value={t.displayPayee}
                         onChange={(name, lastCategoryId) => handlePayeeChange(t.originalPayee, name, lastCategoryId)}
@@ -374,16 +431,17 @@ function ImportPreviewModal({
                       />
                     ) : (
                       <span
-                        onClick={() => !isSkipped && setEditingField({ index, field: 'payee' })}
-                        className={`truncate block ${isSkipped ? 'line-through' : 'cursor-pointer hover:bg-blue-50 px-1 -mx-1 rounded'}`}
-                        title={t.isMapped && t.displayPayee !== t.originalPayee ? `Original: ${t.originalPayee}` : undefined}
+                        onClick={() => !isSkipped && !isTransfer && setEditingField({ index, field: 'payee' })}
+                        className={`truncate block ${isSkipped ? 'line-through' : isTransfer ? 'text-gray-400 px-1 -mx-1' : 'cursor-pointer hover:bg-blue-50 px-1 -mx-1 rounded'}`}
+                        title={!isTransfer && t.isMapped && t.displayPayee !== t.originalPayee ? `Original: ${t.originalPayee}` : undefined}
                       >
-                        {t.displayPayee || '-'}
-                        {t.isMapped && t.displayPayee !== t.originalPayee && !isSkipped && (
+                        {transferPayee ?? t.displayPayee ?? '-'}
+                        {!isTransfer && t.isMapped && t.displayPayee !== t.originalPayee && !isSkipped && (
                           <span className="ml-1 text-blue-500 text-xs">*</span>
                         )}
                       </span>
-                    )}
+                    );
+                    })()}
                   </td>
                   <td className="py-2 pr-4 max-w-[150px]">
                     {editingField?.index === index && editingField?.field === 'category' && !isSkipped ? (
@@ -400,7 +458,11 @@ function ImportPreviewModal({
                         onClick={() => !isSkipped && setEditingField({ index, field: 'category' })}
                         className={`truncate block text-gray-600 ${isSkipped ? 'line-through' : 'cursor-pointer hover:bg-blue-50 px-1 -mx-1 rounded'}`}
                       >
-                        {t.displayCategoryId ? categoryNameLookup.get(t.displayCategoryId) || '-' : '-'}
+                        {t.displayCategoryId?.startsWith('transfer:')
+                        ? `Transfer: ${accountNameLookup.get(t.displayCategoryId.replace('transfer:', '')) || '...'}`
+                        : t.displayCategoryId
+                          ? categoryNameLookup.get(t.displayCategoryId) || '-'
+                          : '-'}
                       </span>
                     )}
                   </td>
@@ -426,17 +488,17 @@ function ImportPreviewModal({
         <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 flex-shrink-0">
           <button
             onClick={onClose}
-            disabled={importTransactions.isPending}
+            disabled={isImporting}
             className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
           >
             Cancel
           </button>
           <button
             onClick={handleImport}
-            disabled={importTransactions.isPending || newTransactions.length === 0}
+            disabled={isImporting || newTransactions.length === 0}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
           >
-            {importTransactions.isPending ? 'Importing...' : 'Import'}
+            {isImporting ? 'Importing...' : 'Import'}
           </button>
         </div>
       </div>

@@ -58,6 +58,17 @@
 - [ ] Show achievement history/stats
 - [ ] Notification banner for completed targets
 
+## Import Improvements
+
+### 9. Remember Transfer Account Selections in Import Payee Mappings
+- [ ] When a user marks an original payee as a transfer to a specific account during import, remember this for future imports
+- [ ] Add `transfer_account_id` column to `import_payee_mapping` table (migration required)
+- [ ] On future imports, auto-suggest the same transfer account when the same original payee is encountered
+- [ ] Display the auto-suggested transfer in the category column as "Transfer: AccountName"
+- [ ] Allow the user to override the suggestion as usual
+
+Currently, transfer account selections made during import are not persisted. The payee mapping system only stores `originalPayee → payeeId`, and `lastCategoryId` on a payee is never set to a transfer account because `createTransfer` creates transactions with no category.
+
 ## Lower Priority Polish
 
 ### 9. Undo/Redo for Budget Assignments
