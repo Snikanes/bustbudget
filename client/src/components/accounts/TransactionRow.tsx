@@ -249,7 +249,7 @@ function TransactionRow({ transaction, currentAccountId }: TransactionRowProps) 
       </div>
 
       {/* Memo */}
-      <div className="text-sm">
+      <div className="text-sm truncate">
         {editingField === 'memo' ? (
           <TextInput
             value={transaction.memo || ''}
@@ -268,6 +268,7 @@ function TransactionRow({ transaction, currentAccountId }: TransactionRowProps) 
               if (canEditMemo) setEditingField('memo');
             }}
             className={`truncate block ${canEditMemo ? 'cursor-pointer hover:bg-blue-50 px-1 -mx-1 rounded' : ''}`}
+            title={transaction.memo || undefined}
           >
             {transaction.memo || '-'}
           </span>
