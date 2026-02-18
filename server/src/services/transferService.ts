@@ -77,9 +77,9 @@ export function createTransfer(userId: string, data: CreateTransferRequest): Tra
 
     // Step 2: Create transfer record
     db.prepare(`
-      INSERT INTO transfer (id, user_id, from_txn_id, to_txn_id, created_at)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(transferId, userId, fromTxnId, toTxnId, now);
+      INSERT INTO transfer (id, from_txn_id, to_txn_id, created_at)
+      VALUES (?, ?, ?, ?)
+    `).run(transferId, fromTxnId, toTxnId, now);
 
     // Step 3: Update transactions with transfer_id
     db.prepare('UPDATE "transaction" SET transfer_id = ? WHERE user_id = ? AND id = ?').run(transferId, userId, fromTxnId);
@@ -118,8 +118,8 @@ export function getTransferById(userId: string, id: string): Transfer {
     FROM transfer tr
     JOIN "transaction" from_t ON from_t.id = tr.from_txn_id
     JOIN "transaction" to_t ON to_t.id = tr.to_txn_id
-    WHERE tr.user_id = ? AND tr.id = ?
-  `).get(userId, id) as {
+    WHERE tr.id = ? AND from_t.user_id = ?
+  `).get(id, userId) as {
     id: string;
     from_txn_id: string;
     to_txn_id: string;
@@ -219,7 +219,12 @@ export function updateTransfer(
 export function deleteTransfer(userId: string, id: string): void {
   const db = getDb();
 
-  const existing = db.prepare('SELECT from_txn_id, to_txn_id FROM transfer WHERE user_id = ? AND id = ?').get(userId, id) as { from_txn_id: string; to_txn_id: string } | undefined;
+  const existing = db.prepare(`
+    SELECT tr.from_txn_id, tr.to_txn_id
+    FROM transfer tr
+    JOIN "transaction" t ON t.id = tr.from_txn_id
+    WHERE tr.id = ? AND t.user_id = ?
+  `).get(id, userId) as { from_txn_id: string; to_txn_id: string } | undefined;
 
   if (!existing) {
     throw new NotFoundError('Transfer', id);
@@ -228,5 +233,5 @@ export function deleteTransfer(userId: string, id: string): void {
   // Delete transactions and transfer
   db.prepare('DELETE FROM "transaction" WHERE user_id = ? AND id = ?').run(userId, existing.from_txn_id);
   db.prepare('DELETE FROM "transaction" WHERE user_id = ? AND id = ?').run(userId, existing.to_txn_id);
-  db.prepare('DELETE FROM transfer WHERE user_id = ? AND id = ?').run(userId, id);
+  db.prepare('DELETE FROM transfer WHERE id = ?').run(id);
 }
