@@ -7,6 +7,7 @@ build/
 
 # Database
 server/data/
+test-data/
 backups/
 
 # Environment

@@ -7,7 +7,7 @@ import fs from 'fs';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const DB_PATH = join(__dirname, '../../data/budget.db');
+const DB_PATH = process.env.DATABASE_PATH ?? join(__dirname, '../../data/budget.db');
 
 export async function runMigrations(): Promise<void> {
   // Ensure data directory exists
