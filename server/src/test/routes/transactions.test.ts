@@ -66,7 +66,7 @@ describe('GET /api/transactions/:id', () => {
     expect(transaction.isStartingBalance).toBe(false);
     expect(transaction.categoryId).toBeNull();
     expect(transaction.categoryName).toBeNull();
-    expect(transaction.transferId).toBeNull();
+    expect(transaction.linkedTransactionId).toBeNull();
     expect(transaction.transferAccountId).toBeNull();
     expect(transaction.transferAccountName).toBeNull();
   });
@@ -523,7 +523,7 @@ describe('DELETE /api/transactions/:id', () => {
       .expect(404);
   });
 
-  it('deletes both transactions and the transfer record when deleting a transfer', async () => {
+  it('deletes both linked transactions when deleting a transfer', async () => {
     const { id: userId, email } = createTestUser();
     const accountA = createAccount(userId, { name: 'Account A' });
     const accountB = createAccount(userId, { name: 'Account B' });
@@ -553,7 +553,6 @@ describe('DELETE /api/transactions/:id', () => {
     const accountB = createAccount(userId, { name: 'Account B' });
     const { fromTxnId, toTxnId } = createTransfer(userId, accountA, accountB);
 
-    // Delete to side
     await request(app)
       .delete(`/api/transactions/${toTxnId}`)
       .set('Cookie', makeAuthCookie(userId, email))
@@ -568,5 +567,301 @@ describe('DELETE /api/transactions/:id', () => {
       .get(`/api/transactions/${toTxnId}`)
       .set('Cookie', makeAuthCookie(userId, email))
       .expect(404);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/accounts/:id/transactions — Transfer creation
+// ---------------------------------------------------------------------------
+
+describe('POST /api/accounts/:id/transactions (transfers)', () => {
+  const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+
+  it('creates a transfer and returns 201 with transferAccountId populated', async () => {
+    const { id: userId, email } = createTestUser();
+    const checking = createAccount(userId, { name: 'Checking' });
+    const savings = createAccount(userId, { name: 'Savings' });
+
+    const res = await request(app)
+      .post(`/api/accounts/${checking}/transactions`)
+      .set('Cookie', makeAuthCookie(userId, email))
+      .send({ date: yesterday, amount: 50000, transferAccountId: savings })
+      .expect(201);
+
+    const { transaction } = res.body;
+    expect(transaction.accountId).toBe(checking);
+    expect(transaction.transferAccountId).toBe(savings);
+    expect(transaction.transferAccountName).toBe('Savings');
+    expect(transaction.linkedTransactionId).toBeTruthy();
+    expect(transaction.amount).toBe(-50000);
+    expect(transaction.categoryId).toBeNull();
+  });
+
+  it('creates a sibling transaction in the target account with opposite amount', async () => {
+    const { id: userId, email } = createTestUser();
+    const checking = createAccount(userId, { name: 'Checking' });
+    const savings = createAccount(userId, { name: 'Savings' });
+
+    const res = await request(app)
+      .post(`/api/accounts/${checking}/transactions`)
+      .set('Cookie', makeAuthCookie(userId, email))
+      .send({ date: yesterday, amount: 50000, transferAccountId: savings })
+      .expect(201);
+
+    const siblingId = res.body.transaction.linkedTransactionId;
+    const sibRes = await request(app)
+      .get(`/api/transactions/${siblingId}`)
+      .set('Cookie', makeAuthCookie(userId, email))
+      .expect(200);
+
+    const sibling = sibRes.body.transaction;
+    expect(sibling.accountId).toBe(savings);
+    expect(sibling.transferAccountId).toBe(checking);
+    expect(sibling.transferAccountName).toBe('Checking');
+    expect(sibling.amount).toBe(50000);
+    expect(sibling.linkedTransactionId).toBe(res.body.transaction.id);
+  });
+
+  it('sets auto-generated payees on both sides of the transfer', async () => {
+    const { id: userId, email } = createTestUser();
+    const checking = createAccount(userId, { name: 'Checking' });
+    const savings = createAccount(userId, { name: 'Savings' });
+
+    const res = await request(app)
+      .post(`/api/accounts/${checking}/transactions`)
+      .set('Cookie', makeAuthCookie(userId, email))
+      .send({ date: yesterday, amount: 50000, transferAccountId: savings })
+      .expect(201);
+
+    expect(res.body.transaction.payee).toBe('Transfer to Savings');
+
+    const sibRes = await request(app)
+      .get(`/api/transactions/${res.body.transaction.linkedTransactionId}`)
+      .set('Cookie', makeAuthCookie(userId, email))
+      .expect(200);
+
+    expect(sibRes.body.transaction.payee).toBe('Transfer from Checking');
+  });
+
+  it('shares memo and isCleared between both sides', async () => {
+    const { id: userId, email } = createTestUser();
+    const checking = createAccount(userId, { name: 'Checking' });
+    const savings = createAccount(userId, { name: 'Savings' });
+
+    const res = await request(app)
+      .post(`/api/accounts/${checking}/transactions`)
+      .set('Cookie', makeAuthCookie(userId, email))
+      .send({ date: yesterday, amount: 50000, transferAccountId: savings, memo: 'Savings deposit', isCleared: true })
+      .expect(201);
+
+    const sibRes = await request(app)
+      .get(`/api/transactions/${res.body.transaction.linkedTransactionId}`)
+      .set('Cookie', makeAuthCookie(userId, email))
+      .expect(200);
+
+    expect(res.body.transaction.memo).toBe('Savings deposit');
+    expect(res.body.transaction.isCleared).toBe(true);
+    expect(sibRes.body.transaction.memo).toBe('Savings deposit');
+    expect(sibRes.body.transaction.isCleared).toBe(true);
+  });
+
+  it('returns 400 when transferAccountId equals source account', async () => {
+    const { id: userId, email } = createTestUser();
+    const checking = createAccount(userId, { name: 'Checking' });
+
+    await request(app)
+      .post(`/api/accounts/${checking}/transactions`)
+      .set('Cookie', makeAuthCookie(userId, email))
+      .send({ date: yesterday, amount: 50000, transferAccountId: checking })
+      .expect(400);
+  });
+
+  it('returns 404 when transferAccountId does not exist', async () => {
+    const { id: userId, email } = createTestUser();
+    const checking = createAccount(userId, { name: 'Checking' });
+
+    await request(app)
+      .post(`/api/accounts/${checking}/transactions`)
+      .set('Cookie', makeAuthCookie(userId, email))
+      .send({ date: yesterday, amount: 50000, transferAccountId: 'non-existent' })
+      .expect(404);
+  });
+
+  it('returns 404 when transferAccountId belongs to another user', async () => {
+    const { id: userId, email } = createTestUser({ email: 'user@test.com' });
+    const { id: otherId } = createTestUser({ email: 'other@test.com' });
+    const checking = createAccount(userId, { name: 'Checking' });
+    const otherAccount = createAccount(otherId, { name: 'Other Savings' });
+
+    await request(app)
+      .post(`/api/accounts/${checking}/transactions`)
+      .set('Cookie', makeAuthCookie(userId, email))
+      .send({ date: yesterday, amount: 50000, transferAccountId: otherAccount })
+      .expect(404);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PUT /api/transactions/:id — Transfer update propagation
+// ---------------------------------------------------------------------------
+
+describe('PUT /api/transactions/:id (transfers)', () => {
+  const dayBefore = new Date(Date.now() - 172800000).toISOString().split('T')[0];
+
+  it('propagates date change to sibling transaction', async () => {
+    const { id: userId, email } = createTestUser();
+    const accountA = createAccount(userId, { name: 'Account A' });
+    const accountB = createAccount(userId, { name: 'Account B' });
+    const { fromTxnId, toTxnId } = createTransfer(userId, accountA, accountB);
+
+    await request(app)
+      .put(`/api/transactions/${fromTxnId}`)
+      .set('Cookie', makeAuthCookie(userId, email))
+      .send({ date: dayBefore })
+      .expect(200);
+
+    const sibRes = await request(app)
+      .get(`/api/transactions/${toTxnId}`)
+      .set('Cookie', makeAuthCookie(userId, email))
+      .expect(200);
+
+    expect(sibRes.body.transaction.date).toBe(dayBefore);
+  });
+
+  it('propagates amount change (negated) to sibling transaction', async () => {
+    const { id: userId, email } = createTestUser();
+    const accountA = createAccount(userId, { name: 'Account A' });
+    const accountB = createAccount(userId, { name: 'Account B' });
+    const { fromTxnId, toTxnId } = createTransfer(userId, accountA, accountB);
+
+    await request(app)
+      .put(`/api/transactions/${fromTxnId}`)
+      .set('Cookie', makeAuthCookie(userId, email))
+      .send({ amount: -75000 })
+      .expect(200);
+
+    const sibRes = await request(app)
+      .get(`/api/transactions/${toTxnId}`)
+      .set('Cookie', makeAuthCookie(userId, email))
+      .expect(200);
+
+    expect(sibRes.body.transaction.amount).toBe(75000);
+  });
+
+  it('propagates memo change to sibling transaction', async () => {
+    const { id: userId, email } = createTestUser();
+    const accountA = createAccount(userId, { name: 'Account A' });
+    const accountB = createAccount(userId, { name: 'Account B' });
+    const { fromTxnId, toTxnId } = createTransfer(userId, accountA, accountB);
+
+    await request(app)
+      .put(`/api/transactions/${fromTxnId}`)
+      .set('Cookie', makeAuthCookie(userId, email))
+      .send({ memo: 'Shared note' })
+      .expect(200);
+
+    const sibRes = await request(app)
+      .get(`/api/transactions/${toTxnId}`)
+      .set('Cookie', makeAuthCookie(userId, email))
+      .expect(200);
+
+    expect(sibRes.body.transaction.memo).toBe('Shared note');
+  });
+
+  it('propagates isCleared change to sibling transaction', async () => {
+    const { id: userId, email } = createTestUser();
+    const accountA = createAccount(userId, { name: 'Account A' });
+    const accountB = createAccount(userId, { name: 'Account B' });
+    const { fromTxnId, toTxnId } = createTransfer(userId, accountA, accountB);
+
+    await request(app)
+      .put(`/api/transactions/${fromTxnId}`)
+      .set('Cookie', makeAuthCookie(userId, email))
+      .send({ isCleared: true })
+      .expect(200);
+
+    const sibRes = await request(app)
+      .get(`/api/transactions/${toTxnId}`)
+      .set('Cookie', makeAuthCookie(userId, email))
+      .expect(200);
+
+    expect(sibRes.body.transaction.isCleared).toBe(true);
+  });
+
+  it('returns 422 CLEARED_TRANSFER_IMMUTABLE when updating date on a cleared transfer', async () => {
+    const { id: userId, email } = createTestUser();
+    const accountA = createAccount(userId, { name: 'Account A' });
+    const accountB = createAccount(userId, { name: 'Account B' });
+    const { fromTxnId } = createTransfer(userId, accountA, accountB);
+
+    await request(app)
+      .put(`/api/transactions/${fromTxnId}`)
+      .set('Cookie', makeAuthCookie(userId, email))
+      .send({ isCleared: true })
+      .expect(200);
+
+    const res = await request(app)
+      .put(`/api/transactions/${fromTxnId}`)
+      .set('Cookie', makeAuthCookie(userId, email))
+      .send({ date: dayBefore })
+      .expect(422);
+
+    expect(res.body.error.code).toBe('CLEARED_TRANSFER_IMMUTABLE');
+  });
+
+  it('returns 422 CLEARED_TRANSFER_IMMUTABLE when updating amount on a cleared transfer', async () => {
+    const { id: userId, email } = createTestUser();
+    const accountA = createAccount(userId, { name: 'Account A' });
+    const accountB = createAccount(userId, { name: 'Account B' });
+    const { fromTxnId } = createTransfer(userId, accountA, accountB);
+
+    await request(app)
+      .put(`/api/transactions/${fromTxnId}`)
+      .set('Cookie', makeAuthCookie(userId, email))
+      .send({ isCleared: true })
+      .expect(200);
+
+    const res = await request(app)
+      .put(`/api/transactions/${fromTxnId}`)
+      .set('Cookie', makeAuthCookie(userId, email))
+      .send({ amount: -1 })
+      .expect(422);
+
+    expect(res.body.error.code).toBe('CLEARED_TRANSFER_IMMUTABLE');
+  });
+
+  it('can still update memo on a cleared transfer', async () => {
+    const { id: userId, email } = createTestUser();
+    const accountA = createAccount(userId, { name: 'Account A' });
+    const accountB = createAccount(userId, { name: 'Account B' });
+    const { fromTxnId } = createTransfer(userId, accountA, accountB);
+
+    await request(app)
+      .put(`/api/transactions/${fromTxnId}`)
+      .set('Cookie', makeAuthCookie(userId, email))
+      .send({ isCleared: true })
+      .expect(200);
+
+    const res = await request(app)
+      .put(`/api/transactions/${fromTxnId}`)
+      .set('Cookie', makeAuthCookie(userId, email))
+      .send({ memo: 'Updated on cleared transfer' })
+      .expect(200);
+
+    expect(res.body.transaction.memo).toBe('Updated on cleared transfer');
+  });
+
+  it('returns 400 when setting categoryId on a transfer transaction', async () => {
+    const { id: userId, email } = createTestUser();
+    const accountA = createAccount(userId, { name: 'Account A' });
+    const accountB = createAccount(userId, { name: 'Account B' });
+    const categoryId = createCategory(userId);
+    const { fromTxnId } = createTransfer(userId, accountA, accountB);
+
+    await request(app)
+      .put(`/api/transactions/${fromTxnId}`)
+      .set('Cookie', makeAuthCookie(userId, email))
+      .send({ categoryId })
+      .expect(400);
   });
 });

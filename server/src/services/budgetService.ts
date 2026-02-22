@@ -68,7 +68,7 @@ function computeBudgetWithResets(userId: string, month: string): ComputedBudgetD
 
   const earliestActivity = db.prepare(`
     SELECT MIN(substr(date, 1, 7)) as m FROM "transaction"
-    WHERE user_id = ? AND category_id IS NOT NULL AND transfer_id IS NULL
+    WHERE user_id = ? AND category_id IS NOT NULL AND linked_transaction_id IS NULL
   `).get(userId) as { m: string | null };
 
   const candidates = [earliestAssigned.m, earliestActivity.m, month].filter(Boolean) as string[];
@@ -87,7 +87,7 @@ function computeBudgetWithResets(userId: string, month: string): ComputedBudgetD
     FROM "transaction"
     WHERE user_id = ?
       AND category_id IS NOT NULL
-      AND transfer_id IS NULL
+      AND linked_transaction_id IS NULL
       AND substr(date, 1, 7) <= ?
     GROUP BY category_id, substr(date, 1, 7)
   `).all(userId, month) as ActivityRow[];
@@ -194,7 +194,7 @@ export function getBudgetForMonth(userId: string, month: string): BudgetMonth {
     FROM "transaction"
     WHERE user_id = ?
       AND amount > 0
-      AND transfer_id IS NULL
+      AND linked_transaction_id IS NULL
       AND is_starting_balance = 0
       AND category_id IS NULL
       AND substr(date, 1, 7) <= ?

@@ -86,9 +86,8 @@ export function createTransfer(
   fromAccountId: string,
   toAccountId: string,
   overrides?: { amount?: number; date?: string },
-): { transferId: string; fromTxnId: string; toTxnId: string } {
+): { fromTxnId: string; toTxnId: string } {
   const db = getDb();
-  const transferId = uuidv4();
   const fromTxnId = uuidv4();
   const toTxnId = uuidv4();
   const now = new Date().toISOString();
@@ -97,24 +96,17 @@ export function createTransfer(
 
   db.prepare(
     `INSERT INTO "transaction"
-     (id, user_id, account_id, date, amount, payee, is_cleared, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)`
-  ).run(fromTxnId, userId, fromAccountId, date, -amount, 'Transfer', now, now);
+     (id, user_id, account_id, linked_transaction_id, transfer_account_id, date, amount, payee, is_cleared, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`
+  ).run(fromTxnId, userId, fromAccountId, toTxnId, toAccountId, date, -amount, 'Transfer', now, now);
 
   db.prepare(
     `INSERT INTO "transaction"
-     (id, user_id, account_id, date, amount, payee, is_cleared, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)`
-  ).run(toTxnId, userId, toAccountId, date, amount, 'Transfer', now, now);
+     (id, user_id, account_id, linked_transaction_id, transfer_account_id, date, amount, payee, is_cleared, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`
+  ).run(toTxnId, userId, toAccountId, fromTxnId, fromAccountId, date, amount, 'Transfer', now, now);
 
-  db.prepare(
-    'INSERT INTO transfer (id, from_txn_id, to_txn_id, created_at) VALUES (?, ?, ?, ?)'
-  ).run(transferId, fromTxnId, toTxnId, now);
-
-  db.prepare('UPDATE "transaction" SET transfer_id = ? WHERE id = ?').run(transferId, fromTxnId);
-  db.prepare('UPDATE "transaction" SET transfer_id = ? WHERE id = ?').run(transferId, toTxnId);
-
-  return { transferId, fromTxnId, toTxnId };
+  return { fromTxnId, toTxnId };
 }
 
 export function createPayee(userId: string, name: string, categoryId?: string | null): string {

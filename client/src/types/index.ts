@@ -32,7 +32,7 @@ export interface Transaction {
   accountId: string;
   categoryId: string | null;
   categoryName: string | null;
-  transferId: string | null;
+  linkedTransactionId: string | null;
   transferAccountId: string | null;
   transferAccountName: string | null;
   date: string;
@@ -81,17 +81,6 @@ export interface BudgetMonth {
   ungroupedCategories: BudgetEntry[];
 }
 
-export interface Transfer {
-  id: string;
-  fromTransactionId: string;
-  toTransactionId: string;
-  fromAccountId: string;
-  toAccountId: string;
-  amount: number;
-  date: string;
-  memo: string | null;
-  createdAt: string;
-}
 
 export interface Payee {
   id: string;

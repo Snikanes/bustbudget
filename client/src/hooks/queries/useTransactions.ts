@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Transaction, Transfer, ImportTransactionItem, ImportTransactionsResponse } from '@/types';
+import { Transaction, ImportTransactionItem, ImportTransactionsResponse } from '@/types';
 import { api } from '@/api/client';
 import { accountKeys } from './useAccounts';
 import { payeeKeys } from './usePayees';
@@ -38,6 +38,7 @@ export function useCreateTransaction() {
       categoryId?: string;
       memo?: string;
       isCleared?: boolean;
+      transferAccountId?: string;
     }) =>
       api
         .post<{ transaction: Transaction }>(
@@ -49,6 +50,11 @@ export function useCreateTransaction() {
       queryClient.invalidateQueries({
         queryKey: transactionKeys.byAccount(variables.accountId),
       });
+      if (variables.transferAccountId) {
+        queryClient.invalidateQueries({
+          queryKey: transactionKeys.byAccount(variables.transferAccountId),
+        });
+      }
       queryClient.invalidateQueries({ queryKey: accountKeys.all });
       queryClient.invalidateQueries({ queryKey: payeeKeys.all });
     },
@@ -96,29 +102,6 @@ export function useDeleteTransaction() {
   });
 }
 
-export function useCreateTransfer() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (data: {
-      fromAccountId: string;
-      toAccountId: string;
-      amount: number;
-      date: string;
-      memo?: string;
-      isCleared?: boolean;
-    }) => api.post<{ transfer: Transfer }>('/api/transfers', data).then((r) => r.transfer),
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({
-        queryKey: transactionKeys.byAccount(variables.fromAccountId),
-      });
-      queryClient.invalidateQueries({
-        queryKey: transactionKeys.byAccount(variables.toAccountId),
-      });
-      queryClient.invalidateQueries({ queryKey: accountKeys.all });
-    },
-  });
-}
 
 export function useImportTransactions() {
   const queryClient = useQueryClient();

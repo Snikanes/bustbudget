@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Check, Circle, Trash2, Lock } from 'lucide-react';
 import { Transaction } from '@/types';
 import { formatNOK } from '@/utils/currency';
-import { useUpdateTransaction, useDeleteTransaction, useCreateTransfer } from '@/hooks/queries/useTransactions';
+import { useUpdateTransaction, useDeleteTransaction, useCreateTransaction } from '@/hooks/queries/useTransactions';
 import DateInput from '@/components/shared/DateInput';
 import CategorySelect from '@/components/shared/CategorySelect';
 import CurrencyInput from '@/components/shared/CurrencyInput';
@@ -23,11 +23,11 @@ function TransactionRow({ transaction, currentAccountId }: TransactionRowProps) 
   const rowRef = useRef<HTMLDivElement>(null);
   const updateTransaction = useUpdateTransaction();
   const deleteTransaction = useDeleteTransaction();
-  const createTransfer = useCreateTransfer();
+  const createTransaction = useCreateTransaction();
 
   const isCleared = transaction.isCleared;
   const isReconciled = transaction.isReconciled;
-  const isTransfer = transaction.transferId !== null;
+  const isTransfer = transaction.linkedTransactionId !== null;
   const isStartingBalance = transaction.isStartingBalance;
 
   // Field-level editability
@@ -101,21 +101,16 @@ function TransactionRow({ transaction, currentAccountId }: TransactionRowProps) 
   const handleConvertToTransfer = (targetAccountId: string) => {
     const amount = Math.abs(transaction.amount);
 
-    // Determine direction based on transaction sign
-    const fromAccountId = transaction.amount < 0 ? currentAccountId : targetAccountId;
-    const toAccountId = transaction.amount < 0 ? targetAccountId : currentAccountId;
-
-    // Delete transaction, then create transfer
     deleteTransaction.mutate(transaction.id, {
       onSuccess: () => {
-        createTransfer.mutate(
+        createTransaction.mutate(
           {
-            fromAccountId,
-            toAccountId,
-            amount,
+            accountId: currentAccountId,
             date: transaction.date,
+            amount,
             memo: transaction.memo || undefined,
             isCleared: transaction.isCleared,
+            transferAccountId: targetAccountId,
           },
           {
             onError: (error) => {

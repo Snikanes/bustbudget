@@ -93,26 +93,17 @@ CREATE INDEX IF NOT EXISTS idx_category_user ON category(user_id);
 CREATE INDEX IF NOT EXISTS idx_category_group ON category(group_id);
 CREATE INDEX IF NOT EXISTS idx_category_sort ON category(group_id, sort_order);
 
--- Transfer table (links two transactions)
--- No user_id needed - validates through transaction ownership
-CREATE TABLE IF NOT EXISTS transfer (
-    id TEXT PRIMARY KEY,
-    from_txn_id TEXT NOT NULL,
-    to_txn_id TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    UNIQUE (from_txn_id),
-    UNIQUE (to_txn_id),
-    CHECK (from_txn_id != to_txn_id)
-);
-
 -- Transaction table
 -- is_cleared: 0 = uncleared, 1 = cleared, 2 = reconciled
+-- Transfers: linked_transaction_id points to the sibling transaction,
+--            transfer_account_id stores the OTHER account in the pair
 CREATE TABLE IF NOT EXISTS "transaction" (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
     account_id TEXT NOT NULL,
     category_id TEXT,
-    transfer_id TEXT,
+    linked_transaction_id TEXT,
+    transfer_account_id TEXT,
     date TEXT NOT NULL,
     amount INTEGER NOT NULL,
     payee TEXT,
@@ -124,8 +115,8 @@ CREATE TABLE IF NOT EXISTS "transaction" (
     FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE,
     FOREIGN KEY (account_id) REFERENCES account(id) ON DELETE RESTRICT,
     FOREIGN KEY (category_id) REFERENCES category(id) ON DELETE SET NULL,
-    FOREIGN KEY (transfer_id) REFERENCES transfer(id) ON DELETE SET NULL,
-    CHECK (transfer_id IS NULL OR category_id IS NULL),
+    FOREIGN KEY (transfer_account_id) REFERENCES account(id) ON DELETE RESTRICT,
+    CHECK (linked_transaction_id IS NULL OR category_id IS NULL),
     CHECK (is_starting_balance = 0 OR category_id IS NULL)
 );
 
@@ -133,7 +124,8 @@ CREATE INDEX IF NOT EXISTS idx_transaction_user ON "transaction"(user_id);
 CREATE INDEX IF NOT EXISTS idx_transaction_account ON "transaction"(account_id);
 CREATE INDEX IF NOT EXISTS idx_transaction_category ON "transaction"(category_id);
 CREATE INDEX IF NOT EXISTS idx_transaction_date ON "transaction"(date);
-CREATE INDEX IF NOT EXISTS idx_transaction_transfer ON "transaction"(transfer_id);
+CREATE INDEX IF NOT EXISTS idx_transaction_linked ON "transaction"(linked_transaction_id);
+CREATE INDEX IF NOT EXISTS idx_transaction_transfer_account ON "transaction"(transfer_account_id);
 CREATE INDEX IF NOT EXISTS idx_transaction_year_month ON "transaction"(substr(date, 1, 7));
 
 -- Monthly budget table

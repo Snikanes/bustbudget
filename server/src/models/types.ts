@@ -54,7 +54,8 @@ export interface TransactionRow {
   user_id: string;
   account_id: string;
   category_id: string | null;
-  transfer_id: string | null;
+  linked_transaction_id: string | null;
+  transfer_account_id: string | null;
   date: string;
   amount: number;
   payee: string | null;
@@ -63,13 +64,6 @@ export interface TransactionRow {
   is_starting_balance: number;
   created_at: string;
   updated_at: string;
-}
-
-export interface TransferRow {
-  id: string;
-  from_txn_id: string;
-  to_txn_id: string;
-  created_at: string;
 }
 
 export interface MonthlyBudgetRow {
@@ -183,7 +177,7 @@ export interface Transaction {
   accountId: string;
   categoryId: string | null;
   categoryName: string | null;
-  transferId: string | null;
+  linkedTransactionId: string | null;
   transferAccountId: string | null;
   transferAccountName: string | null;
   date: string;
@@ -195,18 +189,6 @@ export interface Transaction {
   isStartingBalance: boolean;
   createdAt: string;
   updatedAt: string;
-}
-
-export interface Transfer {
-  id: string;
-  fromTransactionId: string;
-  toTransactionId: string;
-  fromAccountId: string;
-  toAccountId: string;
-  amount: number;
-  date: string;
-  memo: string | null;
-  createdAt: string;
 }
 
 export interface MonthlyBudget {
@@ -324,6 +306,7 @@ export interface CreateTransactionRequest {
   categoryId?: string;
   memo?: string;
   isCleared?: boolean;
+  transferAccountId?: string;
 }
 
 export interface UpdateTransactionRequest {
@@ -331,15 +314,6 @@ export interface UpdateTransactionRequest {
   amount?: number;
   payee?: string;
   categoryId?: string | null;
-  memo?: string;
-  isCleared?: boolean;
-}
-
-export interface CreateTransferRequest {
-  fromAccountId: string;
-  toAccountId: string;
-  amount: number;
-  date: string;
   memo?: string;
   isCleared?: boolean;
 }

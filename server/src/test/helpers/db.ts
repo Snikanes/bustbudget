@@ -9,8 +9,7 @@ export function clearAllData(): void {
     db.prepare('DELETE FROM import_profile').run();
     db.prepare('DELETE FROM monthly_budget').run();
     db.prepare('DELETE FROM category_target').run();
-    db.prepare('UPDATE "transaction" SET transfer_id = NULL').run();
-    db.prepare('DELETE FROM transfer').run();
+    db.prepare('UPDATE "transaction" SET linked_transaction_id = NULL').run();
     db.prepare('DELETE FROM "transaction"').run();
     db.prepare('DELETE FROM category').run();
     db.prepare('DELETE FROM payee').run();

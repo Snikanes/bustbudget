@@ -13,18 +13,16 @@ import { upsertPayee } from './payeeService.js';
 
 interface TransactionWithJoins extends TransactionRow {
   category_name: string | null;
-  transfer_account_id: string | null;
   transfer_account_name: string | null;
 }
 
 function rowToTransaction(row: TransactionWithJoins): Transaction {
-  // is_cleared: 0 = uncleared, 1 = cleared, 2 = reconciled
   return {
     id: row.id,
     accountId: row.account_id,
     categoryId: row.category_id,
     categoryName: row.category_name,
-    transferId: row.transfer_id,
+    linkedTransactionId: row.linked_transaction_id,
     transferAccountId: row.transfer_account_id,
     transferAccountName: row.transfer_account_name,
     date: row.date,
@@ -43,16 +41,10 @@ const BASE_QUERY = `
   SELECT
     t.*,
     c.name as category_name,
-    other_t.account_id as transfer_account_id,
-    other_a.name as transfer_account_name
+    transfer_a.name as transfer_account_name
   FROM "transaction" t
   LEFT JOIN category c ON c.id = t.category_id
-  LEFT JOIN transfer tr ON tr.id = t.transfer_id
-  LEFT JOIN "transaction" other_t ON (
-    (tr.from_txn_id = t.id AND tr.to_txn_id = other_t.id) OR
-    (tr.to_txn_id = t.id AND tr.from_txn_id = other_t.id)
-  )
-  LEFT JOIN account other_a ON other_a.id = other_t.account_id
+  LEFT JOIN account transfer_a ON transfer_a.id = t.transfer_account_id
 `;
 
 export function getTransactionsByAccount(userId: string, accountId: string): Transaction[] {
@@ -69,14 +61,11 @@ export function getTransactionsByAccount(userId: string, accountId: string): Tra
 export function bulkToggleCleared(userId: string, accountId: string): { updatedCount: number } {
   const db = getDb();
 
-  // Validate account exists and belongs to user
   const account = db.prepare('SELECT id FROM account WHERE user_id = ? AND id = ?').get(userId, accountId);
   if (!account) {
     throw new NotFoundError('Account', accountId);
   }
 
-  // Get all non-reconciled transactions for this account
-  // is_cleared: 0 = uncleared, 1 = cleared, 2 = reconciled
   const transactions = db.prepare(`
     SELECT id, is_cleared FROM "transaction"
     WHERE user_id = ? AND account_id = ? AND is_cleared < 2
@@ -86,13 +75,7 @@ export function bulkToggleCleared(userId: string, accountId: string): { updatedC
     return { updatedCount: 0 };
   }
 
-  // Determine new state based on majority
   const unclearedCount = transactions.filter(t => t.is_cleared === 0).length;
-  const clearedCount = transactions.filter(t => t.is_cleared === 1).length;
-
-  // If all uncleared, set all to cleared
-  // If all cleared, set all to uncleared
-  // If mixed, set all to cleared (prioritize clearing)
   const newState = unclearedCount > 0 ? 1 : 0;
 
   const now = new Date().toISOString();
@@ -124,7 +107,6 @@ export function getTransactionById(userId: string, id: string): Transaction {
 export function createTransaction(userId: string, accountId: string, data: CreateTransactionRequest): Transaction {
   const db = getDb();
 
-  // Validate date is not in future
   const today = new Date().toISOString().split('T')[0];
   if (data.date > today) {
     throw new ValidationError('Transaction date cannot be in the future', {
@@ -133,13 +115,15 @@ export function createTransaction(userId: string, accountId: string, data: Creat
     });
   }
 
-  // Validate account exists and belongs to user
-  const account = db.prepare('SELECT id FROM account WHERE user_id = ? AND id = ?').get(userId, accountId);
+  const account = db.prepare('SELECT id, name FROM account WHERE user_id = ? AND id = ?').get(userId, accountId) as { id: string; name: string } | undefined;
   if (!account) {
     throw new NotFoundError('Account', accountId);
   }
 
-  // Validate category exists and belongs to user if provided
+  if (data.transferAccountId) {
+    return createTransferTransaction(userId, accountId, account.name, data);
+  }
+
   if (data.categoryId) {
     const category = db.prepare('SELECT id FROM category WHERE user_id = ? AND id = ?').get(userId, data.categoryId);
     if (!category) {
@@ -154,20 +138,14 @@ export function createTransaction(userId: string, accountId: string, data: Creat
     INSERT INTO "transaction" (id, user_id, account_id, category_id, date, amount, payee, memo, is_cleared, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    id,
-    userId,
-    accountId,
+    id, userId, accountId,
     data.categoryId ?? null,
-    data.date,
-    data.amount,
-    data.payee ?? null,
-    data.memo ?? null,
+    data.date, data.amount,
+    data.payee ?? null, data.memo ?? null,
     data.isCleared ? 1 : 0,
-    now,
-    now
+    now, now
   );
 
-  // Update payee-category association if both payee and category are provided
   if (data.payee && data.categoryId) {
     upsertPayee(userId, data.payee, data.categoryId);
   }
@@ -175,23 +153,70 @@ export function createTransaction(userId: string, accountId: string, data: Creat
   return getTransactionById(userId, id);
 }
 
+function createTransferTransaction(userId: string, accountId: string, accountName: string, data: CreateTransactionRequest): Transaction {
+  const db = getDb();
+  const transferAccountId = data.transferAccountId!;
+
+  if (transferAccountId === accountId) {
+    throw new ValidationError('Transfer must be between different accounts');
+  }
+
+  const targetAccount = db.prepare('SELECT id, name FROM account WHERE user_id = ? AND id = ?').get(userId, transferAccountId) as { id: string; name: string } | undefined;
+  if (!targetAccount) {
+    throw new NotFoundError('Account', transferAccountId);
+  }
+
+  if (data.amount <= 0) {
+    throw new ValidationError('Transfer amount must be positive');
+  }
+
+  const primaryId = uuidv4();
+  const siblingId = uuidv4();
+  const now = new Date().toISOString();
+
+  const insertTxn = db.transaction(() => {
+    db.prepare(`
+      INSERT INTO "transaction" (id, user_id, account_id, linked_transaction_id, transfer_account_id, date, amount, payee, memo, is_cleared, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      primaryId, userId, accountId, siblingId, transferAccountId,
+      data.date, -data.amount,
+      `Transfer to ${targetAccount.name}`,
+      data.memo ?? null, data.isCleared ? 1 : 0,
+      now, now
+    );
+
+    db.prepare(`
+      INSERT INTO "transaction" (id, user_id, account_id, linked_transaction_id, transfer_account_id, date, amount, payee, memo, is_cleared, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      siblingId, userId, transferAccountId, primaryId, accountId,
+      data.date, data.amount,
+      `Transfer from ${accountName}`,
+      data.memo ?? null, data.isCleared ? 1 : 0,
+      now, now
+    );
+  });
+
+  insertTxn();
+
+  return getTransactionById(userId, primaryId);
+}
+
 export function updateTransaction(userId: string, id: string, data: UpdateTransactionRequest): Transaction {
   const db = getDb();
 
-  // Get existing transaction
   const existing = db.prepare('SELECT * FROM "transaction" WHERE user_id = ? AND id = ?').get(userId, id) as TransactionRow | undefined;
   if (!existing) {
     throw new NotFoundError('Transaction', id);
   }
 
-  // is_cleared: 0 = uncleared, 1 = cleared, 2 = reconciled
   const isCleared = existing.is_cleared >= 1;
   const isReconciled = existing.is_cleared === 2;
   const isStartingBalance = existing.is_starting_balance === 1;
+  const isTransfer = existing.linked_transaction_id !== null;
 
-  // Check editability rules
   if (isReconciled) {
-    // Reconciled transactions: only memo can be edited (cannot un-reconcile)
     const attemptedFields: string[] = [];
     if (data.date !== undefined) attemptedFields.push('date');
     if (data.amount !== undefined) attemptedFields.push('amount');
@@ -206,8 +231,15 @@ export function updateTransaction(userId: string, id: string, data: UpdateTransa
         { transactionId: id, attemptedFields, allowedFields: ['memo'] }
       );
     }
+  } else if (isTransfer && isCleared) {
+    if (data.date !== undefined || data.amount !== undefined) {
+      throw new BusinessRuleError(
+        'CLEARED_TRANSFER_IMMUTABLE',
+        'Cleared transfers can only have memo updated',
+        { transactionId: id }
+      );
+    }
   } else if (isCleared) {
-    // Cleared transactions: only memo and isCleared can be edited
     const attemptedFields: string[] = [];
     if (data.date !== undefined) attemptedFields.push('date');
     if (data.amount !== undefined) attemptedFields.push('amount');
@@ -223,7 +255,10 @@ export function updateTransaction(userId: string, id: string, data: UpdateTransa
     }
   }
 
-  // Validate date is not in future
+  if (isTransfer && data.categoryId !== undefined) {
+    throw new ValidationError('Cannot set category on a transfer transaction');
+  }
+
   if (data.date !== undefined) {
     const today = new Date().toISOString().split('T')[0];
     if (data.date > today) {
@@ -234,7 +269,6 @@ export function updateTransaction(userId: string, id: string, data: UpdateTransa
     }
   }
 
-  // Validate category belongs to user if provided
   if (data.categoryId) {
     const category = db.prepare('SELECT id FROM category WHERE user_id = ? AND id = ?').get(userId, data.categoryId);
     if (!category) {
@@ -242,7 +276,6 @@ export function updateTransaction(userId: string, id: string, data: UpdateTransa
     }
   }
 
-  // Starting balance: cannot change amount or add category
   if (isStartingBalance) {
     if (data.amount !== undefined) {
       throw new BusinessRuleError(
@@ -260,9 +293,8 @@ export function updateTransaction(userId: string, id: string, data: UpdateTransa
     }
   }
 
-  // Build update query
   const updates: string[] = [];
-  const params: unknown[] = [];
+  const params: (string | number | null)[] = [];
 
   if (data.date !== undefined) {
     updates.push('date = ?');
@@ -294,10 +326,35 @@ export function updateTransaction(userId: string, id: string, data: UpdateTransa
     db.prepare(`UPDATE "transaction" SET ${updates.join(', ')} WHERE user_id = ? AND id = ?`).run(...params);
   }
 
-  // Update payee-category association if payee or categoryId changed
-  // Get the final state of the transaction to determine payee and category
+  if (isTransfer && existing.linked_transaction_id) {
+    const siblingUpdates: string[] = [];
+    const siblingParams: (string | number | null)[] = [];
+
+    if (data.date !== undefined) {
+      siblingUpdates.push('date = ?');
+      siblingParams.push(data.date);
+    }
+    if (data.memo !== undefined) {
+      siblingUpdates.push('memo = ?');
+      siblingParams.push(data.memo);
+    }
+    if (data.isCleared !== undefined) {
+      siblingUpdates.push('is_cleared = ?');
+      siblingParams.push(data.isCleared ? 1 : 0);
+    }
+    if (data.amount !== undefined) {
+      siblingUpdates.push('amount = ?');
+      siblingParams.push(-data.amount);
+    }
+
+    if (siblingUpdates.length > 0) {
+      siblingParams.push(userId, existing.linked_transaction_id);
+      db.prepare(`UPDATE "transaction" SET ${siblingUpdates.join(', ')} WHERE user_id = ? AND id = ?`).run(...siblingParams);
+    }
+  }
+
   const updated = getTransactionById(userId, id);
-  if (updated.payee && updated.categoryId && !updated.transferId) {
+  if (updated.payee && updated.categoryId && !updated.linkedTransactionId) {
     upsertPayee(userId, updated.payee, updated.categoryId);
   }
 
@@ -312,15 +369,13 @@ export function deleteTransaction(userId: string, id: string): void {
     throw new NotFoundError('Transaction', id);
   }
 
-  // If this is part of a transfer, delete the transfer and both transactions
-  if (existing.transfer_id) {
-    const transfer = db.prepare('SELECT * FROM transfer WHERE id = ?').get(existing.transfer_id) as { from_txn_id: string; to_txn_id: string } | undefined;
-    if (transfer) {
-      db.prepare('DELETE FROM "transaction" WHERE user_id = ? AND id = ?').run(userId, transfer.from_txn_id);
-      db.prepare('DELETE FROM "transaction" WHERE user_id = ? AND id = ?').run(userId, transfer.to_txn_id);
-      db.prepare('DELETE FROM transfer WHERE id = ?').run(existing.transfer_id);
-      return;
-    }
+  if (existing.linked_transaction_id) {
+    db.transaction(() => {
+      db.prepare('UPDATE "transaction" SET linked_transaction_id = NULL WHERE user_id = ? AND id = ?').run(userId, existing.linked_transaction_id);
+      db.prepare('DELETE FROM "transaction" WHERE user_id = ? AND id = ?').run(userId, existing.linked_transaction_id);
+      db.prepare('DELETE FROM "transaction" WHERE user_id = ? AND id = ?').run(userId, id);
+    })();
+    return;
   }
 
   db.prepare('DELETE FROM "transaction" WHERE user_id = ? AND id = ?').run(userId, id);
@@ -329,13 +384,11 @@ export function deleteTransaction(userId: string, id: string): void {
 export function createStartingBalance(userId: string, accountId: string, amount: number, date: string): Transaction {
   const db = getDb();
 
-  // Validate account exists and belongs to user
   const account = db.prepare('SELECT id FROM account WHERE user_id = ? AND id = ?').get(userId, accountId);
   if (!account) {
     throw new NotFoundError('Account', accountId);
   }
 
-  // Check if starting balance already exists
   const existing = db.prepare(`
     SELECT id FROM "transaction" WHERE user_id = ? AND account_id = ? AND is_starting_balance = 1
   `).get(userId, accountId);
@@ -366,7 +419,6 @@ export function importTransactions(
 ): ImportTransactionsResponse {
   const db = getDb();
 
-  // Validate account exists and belongs to user
   const account = db.prepare('SELECT id FROM account WHERE user_id = ? AND id = ?').get(userId, accountId);
   if (!account) {
     throw new NotFoundError('Account', accountId);
@@ -375,17 +427,14 @@ export function importTransactions(
   const importedTransactions: Transaction[] = [];
   let skipped = 0;
 
-  // Get today's date for validation
   const today = new Date().toISOString().split('T')[0];
 
   for (const item of items) {
-    // Skip future-dated transactions
     if (item.date > today) {
       skipped++;
       continue;
     }
 
-    // Check for duplicate: same date + amount (payee doesn't need to match - user may have entered manually with different name)
     const duplicate = db.prepare(`
       SELECT id FROM "transaction"
       WHERE user_id = ? AND account_id = ?
@@ -398,17 +447,14 @@ export function importTransactions(
       continue;
     }
 
-    // Validate category belongs to user if provided
     if (item.categoryId) {
       const category = db.prepare('SELECT id FROM category WHERE user_id = ? AND id = ?').get(userId, item.categoryId);
       if (!category) {
-        // Skip transactions with invalid categories
         skipped++;
         continue;
       }
     }
 
-    // Create the transaction
     const id = uuidv4();
     const now = new Date().toISOString();
 
@@ -416,16 +462,11 @@ export function importTransactions(
       INSERT INTO "transaction" (id, user_id, account_id, category_id, date, amount, payee, memo, is_cleared, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
     `).run(
-      id,
-      userId,
-      accountId,
+      id, userId, accountId,
       item.categoryId ?? null,
-      item.date,
-      item.amount,
-      item.payee ?? null,
-      item.memo ?? null,
-      now,
-      now
+      item.date, item.amount,
+      item.payee ?? null, item.memo ?? null,
+      now, now
     );
 
     importedTransactions.push(getTransactionById(userId, id));
@@ -441,13 +482,11 @@ export function importTransactions(
 export function reconcileAccount(userId: string, accountId: string): { reconciledCount: number } {
   const db = getDb();
 
-  // Validate account exists and belongs to user
   const account = db.prepare('SELECT id FROM account WHERE user_id = ? AND id = ?').get(userId, accountId);
   if (!account) {
     throw new NotFoundError('Account', accountId);
   }
 
-  // Update all cleared transactions (is_cleared = 1) to reconciled (is_cleared = 2)
   const result = db.prepare(`
     UPDATE "transaction"
     SET is_cleared = 2

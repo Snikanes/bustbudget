@@ -3,7 +3,7 @@ import { X } from 'lucide-react';
 import { ParsedTransaction } from '@/utils/qfxParser';
 import { Transaction, Payee } from '@/types';
 import { formatNOK } from '@/utils/currency';
-import { useImportTransactions, useCreateTransfer } from '@/hooks/queries/useTransactions';
+import { useImportTransactions, useCreateTransaction } from '@/hooks/queries/useTransactions';
 import { useImportPayeeMappings, useCreateImportPayeeMapping } from '@/hooks/queries/useImportPayeeMappings';
 import { useCategories } from '@/hooks/queries/useCategories';
 import { usePayees, useCreatePayee } from '@/hooks/queries/usePayees';
@@ -47,7 +47,7 @@ function ImportPreviewModal({
   onImportComplete,
 }: ImportPreviewModalProps) {
   const importTransactions = useImportTransactions();
-  const createTransfer = useCreateTransfer();
+  const createTransaction = useCreateTransaction();
   const { data: payeeMappings, isLoading: mappingsLoading } = useImportPayeeMappings();
   const { data: categories } = useCategories();
   const { data: accounts } = useAccounts();
@@ -284,19 +284,16 @@ function ImportPreviewModal({
       return;
     }
 
-    // Create transfer transactions individually
     let transfersCreated = 0;
     for (const t of transferTransactions) {
-      const targetAccountId = t.displayCategoryId!.replace('transfer:', '');
-      const fromAccountId = t.amount < 0 ? accountId : targetAccountId;
-      const toAccountId = t.amount < 0 ? targetAccountId : accountId;
+      const transferAccountId = t.displayCategoryId!.replace('transfer:', '');
       try {
-        await createTransfer.mutateAsync({
-          fromAccountId,
-          toAccountId,
-          amount: Math.abs(t.amount),
+        await createTransaction.mutateAsync({
+          accountId,
           date: t.date,
+          amount: Math.abs(t.amount),
           memo: t.memo || undefined,
+          transferAccountId,
         });
         transfersCreated++;
       } catch (error) {

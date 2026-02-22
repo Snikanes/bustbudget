@@ -1,6 +1,6 @@
 import { useState, FormEvent } from 'react';
 import { X } from 'lucide-react';
-import { useCreateTransaction, useCreateTransfer } from '@/hooks/queries/useTransactions';
+import { useCreateTransaction } from '@/hooks/queries/useTransactions';
 import { useCategories } from '@/hooks/queries/useCategories';
 import { useAccounts } from '@/hooks/queries/useAccounts';
 import PayeeSelect from '@/components/shared/PayeeSelect';
@@ -20,7 +20,6 @@ function TransactionModal({ accountId, onClose }: TransactionModalProps) {
   const [isCleared, setIsCleared] = useState(false);
 
   const createTransaction = useCreateTransaction();
-  const createTransfer = useCreateTransfer();
   const { data: categories } = useCategories();
   const { data: accounts } = useAccounts();
 
@@ -67,23 +66,18 @@ function TransactionModal({ accountId, onClose }: TransactionModalProps) {
     const inflowAmount = parseFloat(inflow.replace(',', '.')) * 100 || 0;
     const amount = inflowAmount - outflowAmount;
 
-    // Check if a transfer was selected
     if (categoryId && categoryId.startsWith('transfer:')) {
-      const targetAccountId = categoryId.replace('transfer:', '');
+      const transferAccountId = categoryId.replace('transfer:', '');
       const transferAmount = Math.abs(amount);
 
-      // Determine direction based on amount sign
-      const fromAccountId = amount < 0 ? accountId : targetAccountId;
-      const toAccountId = amount < 0 ? targetAccountId : accountId;
-
-      createTransfer.mutate(
+      createTransaction.mutate(
         {
-          fromAccountId,
-          toAccountId,
-          amount: transferAmount,
+          accountId,
           date,
+          amount: transferAmount,
           memo: memo || undefined,
           isCleared,
+          transferAccountId,
         },
         {
           onSuccess: () => {
@@ -92,7 +86,6 @@ function TransactionModal({ accountId, onClose }: TransactionModalProps) {
         }
       );
     } else {
-      // Create regular transaction
       createTransaction.mutate(
         {
           accountId,
@@ -257,10 +250,10 @@ function TransactionModal({ accountId, onClose }: TransactionModalProps) {
             </button>
             <button
               type="submit"
-              disabled={createTransaction.isPending || createTransfer.isPending}
+              disabled={createTransaction.isPending}
               className="flex-1 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors disabled:opacity-50"
             >
-              {createTransaction.isPending || createTransfer.isPending ? 'Saving...' : 'Save'}
+              {createTransaction.isPending ? 'Saving...' : 'Save'}
             </button>
           </div>
         </form>
