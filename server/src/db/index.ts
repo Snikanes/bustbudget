@@ -19,6 +19,8 @@ export function getDb(): Database.Database {
 }
 
 export async function initializeDatabase(): Promise<void> {
+  if (db) return;
+
   // Ensure data directory exists
   const dataDir = dirname(DB_PATH);
   if (!fs.existsSync(dataDir)) {

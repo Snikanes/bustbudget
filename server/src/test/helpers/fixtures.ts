@@ -142,3 +142,33 @@ export function createMonthlyBudget(
   ).run(id, userId, categoryId, yearMonth, assignedAmount, now, now);
   return id;
 }
+
+export function createCategoryTarget(
+  userId: string,
+  categoryId: string,
+  overrides?: {
+    targetType?: 'monthly' | 'yearly' | 'by_date';
+    targetAmount?: number;
+    targetDate?: string;
+    recurrenceDay?: number | null;
+  },
+): string {
+  const db = getDb();
+  const id = uuidv4();
+  const now = new Date().toISOString();
+  db.prepare(
+    `INSERT INTO category_target (id, user_id, category_id, target_type, target_amount, target_date, recurrence_day, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    id,
+    userId,
+    categoryId,
+    overrides?.targetType ?? 'monthly',
+    overrides?.targetAmount ?? 10000,
+    overrides?.targetDate ?? '2026-12-31',
+    overrides?.recurrenceDay ?? null,
+    now,
+    now,
+  );
+  return id;
+}

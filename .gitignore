@@ -34,3 +34,7 @@ npm-debug.log*
 # Compiled vite config
 client/vite.config.js
 client/vite.config.d.ts
+
+# Planning and research notes
+plan.md
+research.md
