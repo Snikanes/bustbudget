@@ -19,6 +19,24 @@ export function parseDateWithFormat(dateStr: string, format: DateFormat): string
   // Skip reserved/pending transactions
   if (trimmed.toLowerCase() === 'reservert') return null;
 
+  // Excel stores dates as serial numbers (days since 1899-12-30, accounting
+  // for the 1900 leap-year bug). Some bank exports omit the cell's date
+  // format, so SheetJS surfaces the raw number as a string like "46112".
+  if (/^\d+(\.\d+)?$/.test(trimmed)) {
+    const serial = parseFloat(trimmed);
+    // Bounds: ~1955-01-01 (20089) to ~2119-12-31 (80296)
+    if (serial >= 20000 && serial <= 80000) {
+      const ms = Math.round((serial - 25569) * 86400 * 1000);
+      const date = new Date(ms);
+      if (!isNaN(date.getTime())) {
+        const y = date.getUTCFullYear();
+        const mo = String(date.getUTCMonth() + 1).padStart(2, '0');
+        const d = String(date.getUTCDate()).padStart(2, '0');
+        return `${y}-${mo}-${d}`;
+      }
+    }
+  }
+
   let day: string, month: string, year: string;
 
   switch (format) {

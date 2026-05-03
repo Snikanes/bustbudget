@@ -286,6 +286,15 @@ function ColumnMappingModal({
     return null;
   }, [columnRoles, dateFormat, rawData, hasHeaderRow, skipRows]);
 
+  const formatCellForDisplay = (row: string[], colIndex: number): string => {
+    const raw = colIndex < row.length ? row[colIndex] ?? '' : '';
+    if (!raw) return '';
+    if (columnRoles.get(colIndex) === 'date') {
+      return parseDateWithFormat(raw, dateFormat) ?? raw;
+    }
+    return raw;
+  };
+
   // Load profile
   const handleProfileSelect = useCallback((profileId: string) => {
     setSelectedProfileId(profileId);
@@ -647,7 +656,7 @@ function ColumnMappingModal({
                         key={colIndex}
                         className="px-3 py-1.5 text-xs text-gray-400 line-through"
                       >
-                        {colIndex < skippedFirstRow.length ? skippedFirstRow[colIndex] : ''}
+                        {formatCellForDisplay(skippedFirstRow, colIndex)}
                       </td>
                     ))}
                   </tr>
@@ -669,7 +678,7 @@ function ColumnMappingModal({
                         key={colIndex}
                         className="px-3 py-1.5 text-xs text-gray-400 line-through"
                       >
-                        {colIndex < skippedLastRow.length ? skippedLastRow[colIndex] : ''}
+                        {formatCellForDisplay(skippedLastRow, colIndex)}
                       </td>
                     ))}
                   </tr>
@@ -687,7 +696,7 @@ function ColumnMappingModal({
                             isSkipped ? 'text-gray-400' : 'text-gray-800'
                           } ${role ? ROLE_COLORS[role].replace('border-', 'border-l-2 border-l-').split(' ')[0] : ''}`}
                         >
-                          {colIndex < row.length ? row[colIndex] : ''}
+                          {formatCellForDisplay(row, colIndex)}
                         </td>
                       );
                     })}
