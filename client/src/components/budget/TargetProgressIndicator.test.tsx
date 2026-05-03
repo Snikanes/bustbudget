@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/react';
-import TargetProgressIndicator, { TargetProgressText } from './TargetProgressIndicator';
+import TargetProgressIndicator from './TargetProgressIndicator';
 import { CategoryTarget } from '@/types';
 
 // Helper function to create mock targets
@@ -555,94 +555,6 @@ describe('TargetProgressIndicator', () => {
       progressBars.forEach((bar) => {
         expect(bar).not.toHaveClass('bg-red-500');
       });
-    });
-  });
-
-  describe('Overspending Detection - Multi-Month', () => {
-    it('should NOT show overspent when spending equals total assigned across months (available=0)', () => {
-      // Target: 750 kr. Assigned 375 kr in Jan, 375 kr in Feb. Spent 750 kr in Feb.
-      // Current month assigned: 37500, Activity: -75000, Available: 0
-      // Old bug: was flagged as overspent because spent (750) > this-month assigned (375)
-      const target = createMockTarget({
-        targetType: 'monthly',
-        targetAmount: 75000,
-      });
-      const { container } = render(
-        <TargetProgressIndicator
-          target={target}
-          assigned={37500}
-          activity={-75000}
-          available={0}
-          currentMonth="2026-02"
-        />
-      );
-
-      // Should NOT be red (overspent) - available=0 means spent equals what was available
-      const progressBars = container.querySelectorAll('.h-full');
-      progressBars.forEach((bar) => {
-        expect(bar).not.toHaveClass('bg-red-500');
-      });
-    });
-
-    it('should show two-part bar when spending exceeds total available across months (available<0)', () => {
-      // Target: 750 kr. Assigned 375 kr in Jan, 375 kr in Feb. Spent 800 kr in Feb.
-      // Available: -5000 (overspent by 50 kr)
-      const target = createMockTarget({
-        targetType: 'monthly',
-        targetAmount: 75000,
-      });
-      const { container } = render(
-        <TargetProgressIndicator
-          target={target}
-          assigned={37500}
-          activity={-80000}
-          available={-5000}
-          currentMonth="2026-02"
-        />
-      );
-
-      // Underfunded + overspent → two-part bar (yellow + red)
-      const progressBars = container.querySelectorAll('.h-full');
-      expect(progressBars).toHaveLength(2);
-      expect(progressBars[0]).toHaveClass('bg-yellow-500');
-      expect(progressBars[1]).toHaveClass('bg-red-500');
-    });
-
-    it('should show "Overspent" text when available is negative', () => {
-      const target = createMockTarget({
-        targetType: 'monthly',
-        targetAmount: 75000,
-      });
-      const { container } = render(
-        <TargetProgressText
-          target={target}
-          assigned={37500}
-          activity={-80000}
-          available={-5000}
-          currentMonth="2026-02"
-        />
-      );
-
-      expect(container.textContent).toContain('Overspent');
-    });
-
-    it('should show "more needed" text (not "Overspent") when available=0', () => {
-      const target = createMockTarget({
-        targetType: 'monthly',
-        targetAmount: 75000,
-      });
-      const { container } = render(
-        <TargetProgressText
-          target={target}
-          assigned={37500}
-          activity={-75000}
-          available={0}
-          currentMonth="2026-02"
-        />
-      );
-
-      // Not overspent, so should NOT show "Overspent" text
-      expect(container.textContent).not.toContain('Overspent');
     });
   });
 

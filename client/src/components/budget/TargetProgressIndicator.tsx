@@ -19,7 +19,7 @@ function TargetProgressIndicator({
   const spentAmount = Math.abs(activity);
   const isFunded = assigned >= target.targetAmount;
   // Don't consider it overspent if assigned is negative (money moved out of category)
-  const isOverspent = assigned >= 0 && available < 0;
+  const isOverspent = assigned >= 0 && spentAmount > assigned;
   const isUnderfunded = assigned < target.targetAmount;
 
   // Calculate progress percentage
@@ -35,7 +35,7 @@ function TargetProgressIndicator({
   // Special case: Underfunded AND overspent
   // Show two-part bar: yellow for assigned, red striped for overspent
   if (isUnderfunded && isOverspent) {
-    const overspentAmount = -available;
+    const overspentAmount = spentAmount - assigned;
     const overspentProgress = Math.min(
       100 - progress, // Cap so total doesn't exceed 100%
       (overspentAmount / target.targetAmount) * 100
@@ -93,7 +93,7 @@ export function TargetProgressText({
   const spentAmount = Math.abs(activity);
   const isFunded = assigned >= target.targetAmount;
   // Don't consider it overspent if assigned is negative (money moved out of category)
-  const isOverspent = assigned >= 0 && available < 0;
+  const isOverspent = assigned >= 0 && spentAmount > assigned;
   // For negative assigned, remaining increases (target - negative = target + positive)
   const remaining = Math.max(0, target.targetAmount - assigned);
 
