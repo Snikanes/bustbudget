@@ -3,7 +3,7 @@ import crypto from 'crypto';
 
 // Environment variables with defaults for development
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-in-production';
-const ACCESS_TOKEN_EXPIRY: SignOptions['expiresIn'] = (process.env.JWT_ACCESS_TOKEN_EXPIRY || '15m') as SignOptions['expiresIn'];
+const ACCESS_TOKEN_EXPIRY: SignOptions['expiresIn'] = (process.env.JWT_ACCESS_TOKEN_EXPIRY || '1d') as SignOptions['expiresIn'];
 const REFRESH_TOKEN_EXPIRY_DAYS = 7;
 
 export interface AccessTokenPayload {
@@ -75,7 +75,7 @@ export function getAccessTokenCookieOptions(): {
     httpOnly: true,
     secure: isProduction,
     sameSite: 'strict',
-    maxAge: 15 * 60 * 1000, // 15 minutes in milliseconds
+    maxAge: 24 * 60 * 60 * 1000, // 1 day in milliseconds
     path: '/',
   };
 }
