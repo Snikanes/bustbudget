@@ -103,7 +103,10 @@ function ImportPreviewModal({
 
     return transactions.map((t) => {
       const isDuplicate = existingTransactions.some(
-        (existing) => existing.date === t.date && existing.amount === t.amount
+        (existing) =>
+          existing.date === t.date &&
+          existing.amount === t.amount &&
+          (existing.payee ?? '') === (t.payee ?? '')
       );
 
       const originalPayee = t.payee || '';

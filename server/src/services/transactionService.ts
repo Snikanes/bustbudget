@@ -429,20 +429,23 @@ export function importTransactions(
 
   const today = new Date().toISOString().split('T')[0];
 
+  const existingRows = db.prepare(`
+    SELECT date, amount, payee FROM "transaction"
+    WHERE user_id = ? AND account_id = ?
+  `).all(userId, accountId) as Array<{ date: string; amount: number; payee: string | null }>;
+
+  const existingKeys = new Set(
+    existingRows.map((r) => `${r.date}|${r.amount}|${r.payee ?? ''}`)
+  );
+
   for (const item of items) {
     if (item.date > today) {
       skipped++;
       continue;
     }
 
-    const duplicate = db.prepare(`
-      SELECT id FROM "transaction"
-      WHERE user_id = ? AND account_id = ?
-        AND date = ?
-        AND amount = ?
-    `).get(userId, accountId, item.date, item.amount);
-
-    if (duplicate) {
+    const key = `${item.date}|${item.amount}|${item.payee ?? ''}`;
+    if (existingKeys.has(key)) {
       skipped++;
       continue;
     }
