@@ -12,13 +12,26 @@ class ApiError extends Error {
   }
 }
 
-async function handleResponse<T>(response: Response): Promise<T> {
-  // Handle 401 Unauthorized - trigger logout
-  if (response.status === 401) {
-    useAuthStore.getState().logout();
-    throw new ApiError(401, 'UNAUTHORIZED', 'Session expired. Please log in again.');
-  }
+// Deduplicates concurrent refresh attempts so parallel requests don't each trigger a refresh
+let refreshPromise: Promise<void> | null = null;
 
+function attemptRefresh(): Promise<void> {
+  if (!refreshPromise) {
+    refreshPromise = fetch('/api/auth/refresh', {
+      method: 'POST',
+      credentials: 'include',
+    })
+      .then(r => {
+        if (!r.ok) throw new Error('Refresh failed');
+      })
+      .finally(() => {
+        refreshPromise = null;
+      });
+  }
+  return refreshPromise;
+}
+
+async function parseResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const error = await response.json().catch(() => ({
       error: { code: 'UNKNOWN_ERROR', message: 'An error occurred' },
@@ -33,46 +46,70 @@ async function handleResponse<T>(response: Response): Promise<T> {
   return response.json();
 }
 
+async function executeWithRefresh<T>(
+  requestFn: () => Promise<Response>,
+  processResponse: (r: Response) => Promise<T>
+): Promise<T> {
+  const response = await requestFn();
+
+  if (response.status !== 401) {
+    return processResponse(response);
+  }
+
+  // Access token expired — try to refresh silently
+  try {
+    await attemptRefresh();
+    return processResponse(await requestFn());
+  } catch {
+    useAuthStore.getState().logout();
+    throw new ApiError(401, 'UNAUTHORIZED', 'Session expired. Please log in again.');
+  }
+}
+
 const defaultOptions: RequestInit = {
   credentials: 'include' as RequestCredentials,
 };
 
 export const api = {
   async get<T>(url: string): Promise<T> {
-    const response = await fetch(url, defaultOptions);
-    return handleResponse<T>(response);
+    return executeWithRefresh(
+      () => fetch(url, defaultOptions),
+      r => parseResponse<T>(r)
+    );
   },
 
   async post<T>(url: string, data?: unknown): Promise<T> {
-    const response = await fetch(url, {
-      ...defaultOptions,
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: data ? JSON.stringify(data) : undefined,
-    });
-    return handleResponse<T>(response);
+    const requestFn = () =>
+      fetch(url, {
+        ...defaultOptions,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: data ? JSON.stringify(data) : undefined,
+      });
+    return executeWithRefresh(requestFn, r => parseResponse<T>(r));
   },
 
   async put<T>(url: string, data?: unknown): Promise<T> {
-    const response = await fetch(url, {
-      ...defaultOptions,
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: data ? JSON.stringify(data) : undefined,
-    });
-    return handleResponse<T>(response);
+    const requestFn = () =>
+      fetch(url, {
+        ...defaultOptions,
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: data ? JSON.stringify(data) : undefined,
+      });
+    return executeWithRefresh(requestFn, r => parseResponse<T>(r));
   },
 
   async delete<T = void>(url: string): Promise<T> {
-    const response = await fetch(url, { ...defaultOptions, method: 'DELETE' });
-    if (response.status === 204) {
-      return undefined as T;
-    }
-    return handleResponse<T>(response);
+    const requestFn = () => fetch(url, { ...defaultOptions, method: 'DELETE' });
+    return executeWithRefresh(requestFn, async r => {
+      if (r.status === 204) return undefined as T;
+      return parseResponse<T>(r);
+    });
   },
 };
 
-// Auth-specific API calls (these don't use the standard error handling for 401)
+// Auth-specific API calls (bypass the standard error handling for 401)
 export const authApi = {
   async googleLogin(idToken: string): Promise<{ user: { id: string; email: string; name: string | null; picture: string | null } }> {
     const response = await fetch('/api/auth/google', {
@@ -89,9 +126,18 @@ export const authApi = {
   },
 
   async getMe(): Promise<{ user: { id: string; email: string; name: string | null; picture: string | null } }> {
-    const response = await fetch('/api/auth/me', {
-      credentials: 'include',
-    });
+    const response = await fetch('/api/auth/me', { credentials: 'include' });
+    if (response.status === 401) {
+      // Try to refresh before giving up
+      try {
+        await attemptRefresh();
+        const retried = await fetch('/api/auth/me', { credentials: 'include' });
+        if (!retried.ok) throw new Error('Not authenticated');
+        return retried.json();
+      } catch {
+        throw new Error('Not authenticated');
+      }
+    }
     if (!response.ok) {
       throw new Error('Not authenticated');
     }
@@ -99,13 +145,7 @@ export const authApi = {
   },
 
   async refresh(): Promise<void> {
-    const response = await fetch('/api/auth/refresh', {
-      method: 'POST',
-      credentials: 'include',
-    });
-    if (!response.ok) {
-      throw new Error('Failed to refresh token');
-    }
+    return attemptRefresh();
   },
 
   async logout(): Promise<void> {
