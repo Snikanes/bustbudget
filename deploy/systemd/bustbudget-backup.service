@@ -1,0 +1,14 @@
+[Unit]
+Description=BustBudget database backup
+Documentation=file:///srv/bustbudget/backup-bustbudget.sh
+After=docker.service
+Wants=bustbudget-backup.timer
+
+[Service]
+Type=oneshot
+User=snikanes
+Group=snikanes
+ExecStart=/srv/bustbudget/backup-bustbudget.sh
+
+# The backup target is on mergerfs; give a slow spin-up room to finish.
+TimeoutStartSec=15min
