@@ -1,0 +1,146 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+env:
+  REGISTRY: ghcr.io
+  # ghcr.io/<owner>/<repo>, lowercased by the metadata action
+  IMAGE_NAME: ${{ github.repository }}
+  # The host running BustBudget is x86_64. Add linux/arm64 here if that ever
+  # changes; it roughly triples build time, because better-sqlite3 and sqlite3
+  # are native modules and the arm build compiles under QEMU emulation.
+  PLATFORMS: linux/amd64
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # Server tests run against a throwaway SQLite file created by the
+      # vitest globalSetup; client tests run in jsdom. No network, no keys.
+      - name: Test
+        run: npm test
+
+  image:
+    # Nothing reaches the registry unless the suite is green.
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # Only needed once PLATFORMS includes a non-native arch; cheap to always
+      # set up so flipping arm64 on is genuinely a one-line change.
+      - uses: docker/setup-qemu-action@v4
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Image tags and labels
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      # Built once, loaded locally, and smoke-tested before anything is
+      # pushed — a Dockerfile that builds but cannot start never ships.
+      - name: Build for verification
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: bustbudget:verify
+          build-args: |
+            VITE_GOOGLE_CLIENT_ID=${{ vars.GOOGLE_CLIENT_ID }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Runs through the real ENTRYPOINT — tini, the PUID/PGID remap and
+      # su-exec — because that chain only ever executes in a container and is
+      # the part a local `npm run` can never prove.
+      - name: The image starts, migrates and serves both halves
+        run: |
+          set -euo pipefail
+          docker run -d --name verify \
+            -e JWT_SECRET=ci-dummy \
+            -p 3001:3001 \
+            bustbudget:verify
+
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3001/api/health >/dev/null 2>&1; then
+              break
+            fi
+            sleep 2
+          done
+
+          echo '--- container log ---'
+          docker logs verify
+
+          # API answers.
+          curl -fsS http://127.0.0.1:3001/api/health | grep -q '"status":"ok"'
+
+          # Migrations actually ran. They are plain .js files that tsc does not
+          # emit into dist, so this catches the copy silently going missing.
+          docker logs verify 2>&1 | grep -q 'Migrations completed successfully'
+          docker exec verify test -f /config/budget.db
+
+          # The client bundle is served from the same origin.
+          curl -fsS http://127.0.0.1:3001/ | grep -q '<div id="root">'
+
+          # An unknown client-side route falls back to index.html...
+          curl -fsS http://127.0.0.1:3001/accounts | grep -q '<div id="root">'
+
+          # ...while the API stays behind auth and does not get index.html.
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3001/api/accounts)" = "401"
+
+          docker rm -f verify
+
+      # Pull requests stop here: they get the build and the smoke test, but no
+      # credentials and no push. A fork's token cannot write packages.
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: ${{ env.PLATFORMS }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VITE_GOOGLE_CLIENT_ID=${{ vars.GOOGLE_CLIENT_ID }}
+          # Same layers as the verification build, so this is a re-tag in
+          # practice rather than a second compile.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
