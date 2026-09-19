@@ -1,0 +1,12 @@
+[Unit]
+Description=Run the BustBudget database backup daily
+
+[Timer]
+OnCalendar=daily
+# Spread the load away from every other 00:00 job on the box.
+RandomizedDelaySec=30min
+# Catch up after the machine has been off.
+Persistent=true
+
+[Install]
+WantedBy=timers.target
