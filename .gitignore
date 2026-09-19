@@ -38,3 +38,6 @@ client/vite.config.d.ts
 # Planning and research notes
 plan.md
 research.md
+
+# Docker compose data volume (default BUSTBUDGET_DATA)
+/data/

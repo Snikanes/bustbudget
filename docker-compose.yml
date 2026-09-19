@@ -1,0 +1,31 @@
+services:
+  bustbudget:
+    # Published by CI to GHCR on every green build of main. Set GHCR_OWNER to
+    # your GitHub user/org, e.g. `GHCR_OWNER=snikanes docker compose up -d`, or
+    # put it in .env. To build locally instead, uncomment the `build:` block.
+    image: ghcr.io/${GHCR_OWNER:-set-GHCR_OWNER}/bustbudget:${BUSTBUDGET_TAG:-latest}
+    # build:
+    #   context: .
+    #   args:
+    #     VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID}
+    container_name: bustbudget
+    # Bound to loopback on purpose: nginx on the host terminates TLS and is
+    # the only thing that should reach this port.
+    ports:
+      - "127.0.0.1:3001:3001"
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Oslo
+      - UMASK_SET=022
+      - DATABASE_PATH=/config/budget.db
+    # JWT_SECRET and GOOGLE_CLIENT_ID live here. See .env.example.
+    env_file:
+      - .env
+    volumes:
+      # Holds budget.db (plus its -wal/-shm files). Override with
+      # BUSTBUDGET_DATA in .env to point at the directory you keep backups of.
+      - ${BUSTBUDGET_DATA:-./data}:/config
+    # Let an in-flight SQLite write and its WAL checkpoint finish.
+    stop_grace_period: 30s
+    restart: unless-stopped
