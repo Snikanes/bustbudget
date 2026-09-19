@@ -55,6 +55,20 @@ openssl rand -base64 32
 Note: changing `JWT_SECRET` invalidates every issued token, so everyone has to
 log in again.
 
+### Use `docker compose`, not `docker-compose`
+
+The host has both: the v2 plugin (`docker compose`) and the old Python v1
+binary at `/usr/local/bin/docker-compose`. This file has no `version:` key, so
+v1 falls back to Compose file format v1 — where the top level *is* the service
+map — and fails with:
+
+```
+Unsupported config option for services: 'bustbudget'
+```
+
+That is v1 reading `services` as a service name. Every command below uses the
+v2 plugin.
+
 ## Cutover from the current setup
 
 Today the backend runs as `tsx watch src/index.ts` out of
