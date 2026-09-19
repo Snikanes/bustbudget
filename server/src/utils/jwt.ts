@@ -3,8 +3,28 @@ import crypto from 'crypto';
 
 // Environment variables with defaults for development
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-in-production';
-const ACCESS_TOKEN_EXPIRY: SignOptions['expiresIn'] = (process.env.JWT_ACCESS_TOKEN_EXPIRY || '1d') as SignOptions['expiresIn'];
 const REFRESH_TOKEN_EXPIRY_DAYS = 7;
+
+/**
+ * Resolve JWT_ACCESS_TOKEN_EXPIRY into something jsonwebtoken reads the way
+ * an operator expects.
+ *
+ * jsonwebtoken treats a *number* as seconds but a *string* as an ms() timespan,
+ * and ms() reads a bare numeric string as milliseconds. Environment variables
+ * are always strings, so JWT_ACCESS_TOKEN_EXPIRY=15 means 15ms, which floors to
+ * a zero-second lifetime: every token is issued already expired, the client
+ * refreshes successfully, and the retry still 401s. Nobody wants milliseconds
+ * here, so a bare number is taken as seconds, matching the library's own
+ * documented units.
+ */
+export function parseAccessTokenExpiry(raw: string | undefined): SignOptions['expiresIn'] {
+  const value = raw?.trim();
+  if (!value) return '1d';
+  if (/^\d+$/.test(value)) return Number(value);
+  return value as SignOptions['expiresIn'];
+}
+
+const ACCESS_TOKEN_EXPIRY = parseAccessTokenExpiry(process.env.JWT_ACCESS_TOKEN_EXPIRY);
 
 export interface AccessTokenPayload {
   userId: string;

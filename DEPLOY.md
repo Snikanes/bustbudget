@@ -132,12 +132,18 @@ built `client/dist` exists, so Vite still owns the client in development.
 
 ## Environment variables
 
+Do not copy `server/.env` across wholesale. It is written for local
+development, and compose's `env_file` overrides the image's own defaults — in
+particular `NODE_ENV=development` would clear the `Secure` flag on auth
+cookies on an HTTPS site.
+
+
 | Variable | Default | Notes |
 | --- | --- | --- |
 | `PORT` | `3001` | |
 | `DATABASE_PATH` | `/config/budget.db` | Inside the container |
 | `JWT_SECRET` | dev fallback | **Set this in production** |
-| `JWT_ACCESS_TOKEN_EXPIRY` | `1d` | |
+| `JWT_ACCESS_TOKEN_EXPIRY` | `1d` | Give it a unit (`15m`, `1d`); a bare number means seconds |
 | `GOOGLE_CLIENT_ID` | — | Server-side id token verification |
 | `CORS_ORIGINS` | `http://localhost:5173,http://localhost:5174` | Only needed when the client is served from another origin |
 | `CLIENT_DIST_PATH` | `../../client/dist` relative to the server | |
